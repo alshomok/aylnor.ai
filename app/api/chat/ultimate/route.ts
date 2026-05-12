@@ -358,38 +358,53 @@ export async function POST(request: NextRequest) {
   console.log('=== Ultimate Aylnor.ai API Request Started ===');
   
   try {
-    const formData = await request.formData();
-    const messages = JSON.parse(formData.get('messages') as string);
-    const model = formData.get('model') as string || 'auto';
-    const context = formData.get('context') as string || 'general';
-    const userId = formData.get('userId') as string;
-    const sessionId = formData.get('sessionId') as string;
+    let messages, model, context, userId, sessionId, fileData;
     
-    // Handle file upload
-    let fileData = null;
-    const file = formData.get('file') as File;
-    if (file) {
-      console.log('File uploaded:', file.name, file.type, file.size);
+    const contentType = request.headers.get('content-type') || '';
+    
+    if (contentType.includes('multipart/form-data')) {
+      // Handle FormData (for file uploads)
+      const formData = await request.formData();
+      messages = JSON.parse(formData.get('messages') as string);
+      model = formData.get('model') as string || 'auto';
+      context = formData.get('context') as string || 'general';
+      userId = formData.get('userId') as string;
+      sessionId = formData.get('sessionId') as string;
       
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      
-      // For text files, read content
-      if (file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
-        fileData = {
-          name: file.name,
-          type: file.type,
-          content: buffer.toString('utf-8')
-        };
-      } else {
-        // For other files, save info
-        fileData = {
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          content: `ملف ${file.name} (${file.type}, ${(file.size / 1024).toFixed(2)} KB) تم رفعه.`
-        };
+      // Handle file upload
+      const file = formData.get('file') as File;
+      if (file) {
+        console.log('File uploaded:', file.name, file.type, file.size);
+        
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+        
+        // For text files, read content
+        if (file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+          fileData = {
+            name: file.name,
+            type: file.type,
+            content: buffer.toString('utf-8')
+          };
+        } else {
+          // For other files, save info
+          fileData = {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            content: `ملف ${file.name} (${file.type}, ${(file.size / 1024).toFixed(2)} KB) تم رفعه.`
+          };
+        }
       }
+    } else {
+      // Handle JSON (for regular chat)
+      const body = await request.json();
+      messages = body.messages;
+      model = body.model || 'auto';
+      context = body.context || 'general';
+      userId = body.userId;
+      sessionId = body.sessionId;
+      fileData = body.file;
     }
     
     console.log('Request data:', { messages: messages?.length, model, context, file: fileData?.name });
