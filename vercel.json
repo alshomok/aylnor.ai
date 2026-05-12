@@ -4,9 +4,6 @@
   "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["iad1"],
-  "env": {
-    "NEXT_PUBLIC_APP_URL": "@aylnor-app-url"
-  },
   "functions": {
     "app/api/chat/enhanced/route.ts": {
       "maxDuration": 30
