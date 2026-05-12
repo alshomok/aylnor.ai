@@ -78,7 +78,7 @@ const getContextualPrompt = (context: string = 'general') => {
   return prompts[context as keyof typeof prompts] || prompts.general;
 };
 
-// Call Gemini API with failover
+// Call Gemini API with improved error handling
 async function callGemini(messages: ChatMessage[], model: any, context?: string, file?: any) {
   console.log('=== Calling Gemini API ===');
   console.log('Model:', model.name, 'Index:', model.index);
@@ -102,9 +102,10 @@ async function callGemini(messages: ChatMessage[], model: any, context?: string,
       msg.content && msg.content.trim() && msg.role !== 'system'
     );
     
+    // Create properly formatted prompt
     const fullPrompt = `${enhancedPrompt}\n\n${filteredMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')}`;
     
-    console.log('Sending to Gemini:', fullPrompt.substring(0, 200) + '...');
+    console.log('Sending prompt to Gemini:', fullPrompt.substring(0, 200) + '...');
     
     const result = await geminiModel.generateContent(fullPrompt);
     const response = await result.response;
@@ -117,13 +118,30 @@ async function callGemini(messages: ChatMessage[], model: any, context?: string,
     return response.text();
     
   } catch (error) {
-    console.error(`Gemini API error (key ${model.index}):`, error);
+    console.error('Gemini API error:', error);
+    
+    // Check for specific error types
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    if (errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('400')) {
+      console.error('Gemini 400 error - likely request format issue');
+      // Don't retry 400 errors - they're structural
+      throw new Error(`Gemini request format error: ${errorMessage}`);
+    }
+    
+    if (errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+      console.error('Gemini rate limit hit');
+      // Mark key as failed temporarily
+      failedKeys.add(`gemini-${model.index}`);
+      throw new Error(`Gemini rate limit: ${errorMessage}`);
+    }
+    
     failedKeys.add(`gemini-${model.index}`);
-    throw new Error(`Gemini ${model.index} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Gemini failed: ${errorMessage}`);
   }
 }
 
-// Call Grok API with failover
+// Call Grok API with improved error handling
 async function callGrok(messages: ChatMessage[], model: any, context?: string, file?: any) {
   console.log('=== Calling Grok API ===');
   console.log('Model:', model.name, 'Index:', model.index);
@@ -168,8 +186,22 @@ async function callGrok(messages: ChatMessage[], model: any, context?: string, f
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Grok API error response:', errorText);
+      
+      // Check for specific error types
+      if (errorText.includes('rate_limit')) {
+        console.error('Grok rate limit hit');
+        failedKeys.add(`grok-${model.index}`);
+        throw new Error(`Grok rate limit: ${errorText}`);
+      }
+      
+      if (errorText.includes('invalid_request') || errorText.includes('400')) {
+        console.error('Grok 400 error - request format issue');
+        // Don't retry 400 errors
+        throw new Error(`Grok request format error: ${errorText}`);
+      }
+      
       failedKeys.add(`grok-${model.index}`);
-      throw new Error(`Grok ${model.index} failed: ${response.status} - ${errorText}`);
+      throw new Error(`Grok ${model.index} failed: ${errorText}`);
     }
 
     const data = await response.json();
@@ -179,11 +211,30 @@ async function callGrok(messages: ChatMessage[], model: any, context?: string, f
       throw new Error('Invalid Grok response format');
     }
     
+    console.log('Grok response received successfully');
     return data.choices[0].message.content;
     
   } catch (error) {
     console.error(`Grok API error (key ${model.index}):`, error);
-    throw new Error(`Grok ${model.index} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Check for rate limit
+    if (errorMessage.includes('rate_limit') || errorMessage.includes('429')) {
+      console.error('Grok rate limit hit');
+      failedKeys.add(`grok-${model.index}`);
+      throw new Error(`Grok rate limit: ${errorMessage}`);
+    }
+    
+    // Check for 400/invalid request errors
+    if (errorMessage.includes('400') || errorMessage.includes('invalid_request')) {
+      console.error('Grok 400 error - request format issue');
+      // Don't retry 400 errors
+      throw new Error(`Grok request format error: ${errorMessage}`);
+    }
+    
+    failedKeys.add(`grok-${model.index}`);
+    throw new Error(`Grok ${model.index} failed: ${errorMessage}`);
   }
 }
 
