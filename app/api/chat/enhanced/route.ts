@@ -97,7 +97,21 @@ async function callGemini(messages: ChatMessage[], model: any) {
 
 // Function to call Grok API
 async function callGrok(messages: ChatMessage[], model: any) {
+  console.log('=== Calling Grok API ===');
+  console.log('Model:', model.name);
+  console.log('Messages:', messages);
+  
   try {
+    // Clean messages - remove empty content and filter system messages
+    const cleanMessages = messages
+      .filter(msg => msg.content && msg.content.trim())
+      .filter(msg => msg.role !== 'system') // Remove system messages for Grok
+      .map(msg => ({
+        role: msg.role,
+        content: msg.content.trim()
+      }));
+    console.log('Clean messages for Grok:', cleanMessages);
+    
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -105,18 +119,28 @@ async function callGrok(messages: ChatMessage[], model: any) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: model.name,
-        messages: messages,
-        max_tokens: 1000,
-        temperature: 0.7,
+        model: model.name, // Should be 'grok-beta'
+        messages: cleanMessages,
+        // Minimal payload for testing
       }),
     });
 
+    console.log('Grok response status:', response.status);
+    console.log('Grok response headers:', response.headers);
+
     if (!response.ok) {
-      throw new Error(`Grok API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('Grok API error response:', errorText);
+      throw new Error(`Grok API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('Grok response data:', data);
+    
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('Invalid Grok response format');
+    }
+    
     return data.choices[0].message.content;
   } catch (error) {
     console.error('Grok API error:', error);
