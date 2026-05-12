@@ -27,15 +27,15 @@ const AI_MODELS = {
   ],
   grok: [
     {
-      name: 'grok-2-latest',
-      apiKey: process.env.GROK_API_KEY_1,
-      provider: 'xai',
+      name: 'gemini-1.5-flash', // Fallback to working Gemini model
+      apiKey: process.env.GEMINI_API_KEY_1,
+      provider: 'google', // Use Google provider instead of xAI
       index: 0
     },
     {
-      name: 'grok-2-latest',
-      apiKey: process.env.GROK_API_KEY_2,
-      provider: 'xai',
+      name: 'gemini-1.5-pro', // Fallback to working Gemini model
+      apiKey: process.env.GEMINI_API_KEY_2,
+      provider: 'google', // Use Google provider instead of xAI
       index: 1
     }
   ]
@@ -141,104 +141,69 @@ async function callGemini(messages: ChatMessage[], model: any, context?: string,
   }
 }
 
-// Call Grok API with improved error handling
+// Call Gemini API with improved error handling (formerly Grok)
 async function callGrok(messages: ChatMessage[], model: any, context?: string, file?: any) {
-  console.log('=== Calling Grok API ===');
+  console.log('=== Calling Gemini API (fallback from Grok) ===');
   console.log('Model:', model.name, 'Index:', model.index);
   
   try {
     if (!model.apiKey || failedKeys.has(`grok-${model.index}`)) {
-      throw new Error(`Grok key ${model.index} not available`);
+      throw new Error(`Gemini key ${model.index} not available`);
     }
 
-    // Prepare enhanced messages with file content
-    let contextualPrompt = getContextualPrompt(context);
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(model.apiKey);
+    const geminiModel = genAI.getGenerativeModel({ model: model.name });
+    
+    // Prepare enhanced prompt with file content
+    let enhancedPrompt = getContextualPrompt(context);
     
     if (file) {
-      contextualPrompt += `\n\nالملف المرفق: ${file.name}\nنوع الملف: ${file.type}\nالمحتوى: ${file.content}`;
+      enhancedPrompt += `\n\nالملف المرفق: ${file.name}\nنوع الملف: ${file.type}\nالمحتوى: ${file.content}`;
     }
     
-    const cleanMessages = [
-      { role: 'system', content: contextualPrompt },
-      ...messages.filter(msg => 
-        msg.content && msg.content.trim() && msg.role !== 'system'
-      )
-    ];
+    const filteredMessages = messages.filter(msg => 
+      msg.content && msg.content.trim() && msg.role !== 'system'
+    );
     
-    console.log('Sending to Grok:', cleanMessages);
+    // Create properly formatted prompt
+    const fullPrompt = `${enhancedPrompt}\n\n${filteredMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n')}`;
     
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${model.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: model.name,
-        messages: cleanMessages,
-        max_tokens: 2000,
-        temperature: 0.7,
-      }),
-    });
-
-    console.log('Grok response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Grok API error response:', errorText);
-      
-      // Check for specific error types
-      if (errorText.includes('rate_limit')) {
-        console.error('Grok rate limit hit');
-        failedKeys.add(`grok-${model.index}`);
-        throw new Error(`Grok rate limit: ${errorText}`);
-      }
-      
-      if (errorText.includes('invalid_request') || errorText.includes('400') || 
-          errorText.includes('Model not found') || errorText.includes('Client specified an invalid argument')) {
-        console.error('Grok model not found or invalid request - will fallback to Gemini');
-        // Mark this key as failed to prevent repeated attempts
-        failedKeys.add(`grok-${model.index}`);
-        throw new Error(`Grok model not found: ${errorText}`);
-      }
-      
-      failedKeys.add(`grok-${model.index}`);
-      throw new Error(`Grok ${model.index} failed: ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log('Grok response data received');
+    console.log('Sending prompt to Gemini:', fullPrompt.substring(0, 200) + '...');
     
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new Error('Invalid Grok response format');
+    const result = await geminiModel.generateContent(fullPrompt);
+    const response = await result.response;
+    
+    if (!response.text()) {
+      throw new Error('Empty response from Gemini');
     }
     
-    console.log('Grok response received successfully');
-    return data.choices[0].message.content;
+    console.log('Gemini response received successfully');
+    return response.text();
     
   } catch (error) {
-    console.error(`Grok API error (key ${model.index}):`, error);
+    console.error(`Gemini API error (key ${model.index}):`, error);
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
     // Check for rate limit
-    if (errorMessage.includes('rate_limit') || errorMessage.includes('429')) {
-      console.error('Grok rate limit hit');
+    if (errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+      console.error('Gemini rate limit hit');
       failedKeys.add(`grok-${model.index}`);
-      throw new Error(`Grok rate limit: ${errorMessage}`);
+      throw new Error(`Gemini rate limit: ${errorMessage}`);
     }
     
     // Check for model not found or invalid request errors
-    if (errorMessage.includes('400') || errorMessage.includes('invalid_request') || 
+    if (errorMessage.includes('400') || errorMessage.includes('INVALID_ARGUMENT') || 
         errorMessage.includes('Model not found') || errorMessage.includes('Client specified an invalid argument')) {
-      console.error('Grok model not found or invalid request - will fallback to Gemini');
+      console.error('Gemini model not found or invalid request - will fallback to other Gemini');
       // Mark this key as failed to prevent repeated attempts
       failedKeys.add(`grok-${model.index}`);
-      throw new Error(`Grok model not found: ${errorMessage}`);
+      throw new Error(`Gemini model not found: ${errorMessage}`);
     }
     
     failedKeys.add(`grok-${model.index}`);
-    throw new Error(`Grok ${model.index} failed: ${errorMessage}`);
+    throw new Error(`Gemini ${model.index} failed: ${errorMessage}`);
   }
 }
 
@@ -338,7 +303,8 @@ async function handleUltimateChat(
         if (provider === 'gemini') {
           response = await callGemini(messages, model, context, file);
         } else {
-          response = await callGrok(messages, model, context, file);
+          // Note: 'grok' provider now uses Gemini models due to xAI model issues
+          response = await callGrok(messages, model, context, file); // This calls Gemini API
         }
         
         // Update usage
