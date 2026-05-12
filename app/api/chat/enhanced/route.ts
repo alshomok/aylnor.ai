@@ -48,16 +48,19 @@ interface EnhancedChatRequest {
 
 // Function to get next available model with failover
 function getNextModel(provider: 'gemini' | 'grok') {
+  console.log(`Getting next model for provider: ${provider}`);
+  console.log(`Current index for ${provider}: ${currentModelIndex[provider]}`);
+  
   const models = AI_MODELS[provider];
-  const currentIndex = currentModelIndex[provider];
+  const model = models[currentModelIndex[provider]];
   
-  // Try current model
-  const currentModel = models[currentIndex];
-  if (currentModel.apiKey) {
-    return currentModel;
+  console.log(`Selected model: ${model?.name || 'undefined'}`);
+  console.log(`API key present: ${model?.apiKey ? 'Yes' : 'No'}`);
+  
+  if (!model || !model.apiKey) {
+    console.error(`No valid model found for ${provider}`);
+    return null;
   }
-  
-  // Try other models
   for (let i = 0; i < models.length; i++) {
     if (models[i].apiKey) {
       currentModelIndex[provider] = i;
@@ -219,22 +222,26 @@ async function handleChat(
         );
         
         // Save assistant response
-        await saveMessageToDatabase(
-          sessionId,
-          'assistant',
-          response,
-          model.name,
-          provider
-        );
+        if (model) {
+          await saveMessageToDatabase(
+            sessionId,
+            'assistant',
+            response,
+            model.name,
+            provider
+          );
+        }
         
         // Track usage (estimated token count)
-        const estimatedTokens = Math.ceil(response.length / 4);
-        await trackAIUsage(userId, provider as 'gemini' | 'grok', model.name, estimatedTokens);
+        if (model) {
+          const estimatedTokens = Math.ceil(response.length / 4);
+          await trackAIUsage(userId, provider as 'gemini' | 'grok', model.name, estimatedTokens);
+        }
       }
       
       return {
         response,
-        model: model.name,
+        model: model?.name || 'unknown',
         provider,
         usage: modelUsage
       };
@@ -246,6 +253,10 @@ async function handleChat(
       // Try next model of same provider
       try {
         const nextModel = getNextModel(provider as 'gemini' | 'grok');
+        if (!nextModel) {
+          throw new Error(`No available ${provider} models`);
+        }
+        
         let response: string;
         
         if (provider === 'gemini') {
@@ -292,9 +303,20 @@ async function handleChat(
 }
 
 export async function POST(request: NextRequest) {
+  console.log('=== Chat API Request Started ===');
+  console.log('Timestamp:', new Date().toISOString());
+  
   try {
     const body = await request.json();
+    console.log('Request body:', JSON.stringify(body, null, 2));
+    
     const { messages, model = 'auto', userId, sessionId } = body;
+    
+    console.log('Environment variables check:');
+    console.log('- GEMINI_API_KEY_1:', process.env.GEMINI_API_KEY_1 ? '✅ Set' : '❌ Missing');
+    console.log('- GEMINI_API_KEY_2:', process.env.GEMINI_API_KEY_2 ? '✅ Set' : '❌ Missing');
+    console.log('- GROK_API_KEY_1:', process.env.GROK_API_KEY_1 ? '✅ Set' : '❌ Missing');
+    console.log('- GROK_API_KEY_2:', process.env.GROK_API_KEY_2 ? '✅ Set' : '❌ Missing');
     
     // Check if this is a keys test request
     if (messages && messages[0]?.content === 'test_keys') {
@@ -322,7 +344,11 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    console.log('Starting handleChat with model:', model);
+    console.log('Messages count:', messages?.length || 0);
+    
     const result = await handleChat(messages, model, userId, sessionId);
+    console.log('handleChat result:', result);
     
     return NextResponse.json({
       success: true,
