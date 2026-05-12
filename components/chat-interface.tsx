@@ -57,11 +57,26 @@ const sampleMessages: Message[] = [
 ];
 
 export function ChatInterface({ onCodeGenerated, onExpandCode, persona }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>(sampleMessages);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Fix hydration error
+  useEffect(() => {
+    setMounted(true);
+    // Initialize with sample messages only on client
+    setMessages([
+      {
+        id: "1",
+        role: "assistant",
+        content: "مرحباً! أنا مساعد Aylnor.ai الذكي لمعهد الشموخ. كيف يمكنني مساعدتك اليوم؟",
+        timestamp: new Date(Date.now() - 120000),
+      },
+    ]);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -76,10 +91,10 @@ export function ChatInterface({ onCodeGenerated, onExpandCode, persona }: ChatIn
     if (!input.trim()) return;
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: mounted ? Date.now().toString() : '1',
       role: "user",
       content: input,
-      timestamp: new Date(),
+      timestamp: mounted ? new Date() : new Date(Date.now() - 60000),
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -97,7 +112,7 @@ export function ChatInterface({ onCodeGenerated, onExpandCode, persona }: ChatIn
           messages: [
             {
               role: 'system',
-              content: `You are ${personaName}, an AI assistant for Al-Shamoukh Institute. You help students with coding, learning, and educational tasks. Be helpful, clear, and encouraging.`
+              content: `You are ${persona?.name || 'Aylnor Assistant'}, an AI assistant for Al-Shamoukh Institute. You help students with coding, learning, and educational tasks. Be helpful, clear, and encouraging.`
             },
             ...messages.map(msg => ({
               role: msg.role,
@@ -168,6 +183,16 @@ export function ChatInterface({ onCodeGenerated, onExpandCode, persona }: ChatIn
   };
 
   const personaName = persona?.name || "Fatiha";
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col h-full bg-background">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-background">

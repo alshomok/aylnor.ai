@@ -293,8 +293,27 @@ async function handleChat(
 
 export async function POST(request: NextRequest) {
   try {
-    const body: EnhancedChatRequest = await request.json();
+    const body = await request.json();
     const { messages, model = 'auto', userId, sessionId } = body;
+    
+    // Check if this is a keys test request
+    if (messages && messages[0]?.content === 'test_keys') {
+      const keys = {
+        gemini_key_1: process.env.GEMINI_API_KEY_1 ? '✅ Configured' : '❌ Missing',
+        gemini_key_2: process.env.GEMINI_API_KEY_2 ? '✅ Configured' : '❌ Missing',
+        grok_key_1: process.env.GROK_API_KEY_1 ? '✅ Configured' : '❌ Missing',
+        grok_key_2: process.env.GROK_API_KEY_2 ? '✅ Configured' : '❌ Missing',
+        supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ Configured' : '❌ Missing',
+        supabase_anon: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✅ Configured' : '❌ Missing',
+      };
+      
+      return NextResponse.json({
+        status: 'Environment Variables Check',
+        keys,
+        total_configured: Object.values(keys).filter(k => k.includes('✅')).length,
+        total_required: Object.keys(keys).length
+      });
+    }
     
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -312,12 +331,31 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('Chat API error:', error);
+    
+    // Return more specific error messages
+    let errorMessage = 'Failed to process chat request';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      if (error.message.includes('API key')) {
+        errorMessage = 'API keys not configured properly';
+        statusCode = 503;
+      } else if (error.message.includes('fetch')) {
+        errorMessage = 'Network error occurred';
+        statusCode = 502;
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Request timeout';
+        statusCode = 408;
+      }
+    }
+    
     return NextResponse.json(
       { 
-        error: 'Failed to process chat request',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: errorMessage,
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
       },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }
