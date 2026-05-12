@@ -103,7 +103,7 @@ export function ChatInterface({ onCodeGenerated, onExpandCode, persona }: ChatIn
 
     try {
       // Call Aylnor.ai backend API
-      const response = await fetch('/api/chat/enhanced', {
+      const response = await fetch('/api/chat/simple', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
