@@ -103,27 +103,18 @@ export function ChatInterface({ onCodeGenerated, onExpandCode, persona }: ChatIn
 
     try {
       // Call Aylnor.ai backend API
-      const response = await fetch('/api/chat/simple', {
+      const response = await fetch('/api/chat/ultimate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages: [
-            {
-              role: 'system',
-              content: `You are ${persona?.name || 'Aylnor Assistant'}, an AI assistant for Al-Shamoukh Institute. You help students with coding, learning, and educational tasks. Be helpful, clear, and encouraging.`
-            },
-            ...messages.map(msg => ({
-              role: msg.role,
-              content: msg.content
-            })),
-            {
-              role: 'user',
-              content: input
-            }
-          ],
-          model: 'auto' // Let the backend choose the best model
+          messages: messages.map(msg => ({
+            role: msg.role,
+            content: msg.content
+          })),
+          context: 'general',
+          model: 'auto'
         })
       });
 
@@ -153,7 +144,15 @@ export function ChatInterface({ onCodeGenerated, onExpandCode, persona }: ChatIn
           }
         }
       } else {
-        throw new Error(data.error || 'Failed to get response');
+        // Handle API error
+        console.error('API Error:', data);
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: `عذراً، حدث خطأ: ${data.details || data.error || 'خطأ غير معروف'}. يرجى المحاولة مرة أخرى.`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
       }
     } catch (error) {
       console.error('Chat API error:', error);
