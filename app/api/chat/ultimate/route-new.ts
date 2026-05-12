@@ -18,7 +18,7 @@ interface ChatRequest {
     type: string;
     content?: string;
     size?: number;
-  };
+  } | null | undefined;
 }
 
 // Universal request parser - tries JSON first, falls back to FormData
