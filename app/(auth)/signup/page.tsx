@@ -3,20 +3,21 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AylnorLogoUnique } from "@/components/aylnor-logo-unique";
 
-export default function LoginPage() {
+export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle login - would integrate with auth system
+    // Handle signup - would integrate with auth system
     window.location.href = "/chat";
   };
 
@@ -27,7 +28,7 @@ export default function LoginPage() {
       
       {/* Floating orange orbs */}
       <motion.div
-        className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#FF6B35]/5 rounded-full blur-3xl"
+        className="absolute top-1/3 right-1/4 w-96 h-96 bg-[#FF6B35]/5 rounded-full blur-3xl"
         animate={{
           scale: [1, 1.2, 1],
           opacity: [0.3, 0.5, 0.3],
@@ -39,7 +40,7 @@ export default function LoginPage() {
         }}
       />
       <motion.div
-        className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-accent/10 rounded-full blur-3xl"
+        className="absolute bottom-1/3 left-1/4 w-64 h-64 bg-accent/10 rounded-full blur-3xl"
         animate={{
           scale: [1.2, 1, 1.2],
           opacity: [0.5, 0.3, 0.5],
@@ -51,7 +52,7 @@ export default function LoginPage() {
         }}
       />
 
-      {/* Login Card */}
+      {/* Signup Card */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -62,12 +63,28 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="flex flex-col items-center space-y-2">
             <AylnorLogoUnique size="lg" />
-            <h1 className="text-2xl font-bold text-foreground">Welcome Back</h1>
-            <p className="text-muted-foreground text-sm">Sign in to continue to Aylnor.ai</p>
+            <h1 className="text-2xl font-bold text-foreground">Create Account</h1>
+            <p className="text-muted-foreground text-sm">Join Aylnor.ai and unlock AI power</p>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-sm text-muted-foreground">Full Name</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="John Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="pl-10 bg-secondary/50 border-border focus:border-primary focus:ring-primary/20"
+                  required
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm text-muted-foreground">Email</Label>
               <div className="relative">
@@ -91,7 +108,7 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
+                  placeholder="Create a strong password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10 pr-10 bg-secondary/50 border-border focus:border-primary focus:ring-primary/20"
@@ -105,23 +122,29 @@ export default function LoginPage() {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              <p className="text-xs text-muted-foreground">Must be at least 8 characters</p>
             </div>
 
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="rounded border-border bg-secondary/50 text-primary focus:ring-primary/20" />
-                <span className="text-muted-foreground">Remember me</span>
+            <div className="flex items-start gap-2">
+              <input 
+                type="checkbox" 
+                id="terms"
+                className="mt-1 rounded border-border bg-secondary/50 text-primary focus:ring-primary/20" 
+                required
+              />
+              <label htmlFor="terms" className="text-sm text-muted-foreground cursor-pointer">
+                I agree to the{" "}
+                <Link href="#" className="text-primary hover:text-primary/80">Terms of Service</Link>
+                {" and "}
+                <Link href="#" className="text-primary hover:text-primary/80">Privacy Policy</Link>
               </label>
-              <Link href="#" className="text-primary hover:text-primary/80 transition-colors">
-                Forgot password?
-              </Link>
             </div>
 
             <Button
               type="submit"
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-5 group"
             >
-              Sign In
+              Create Account
               <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </Button>
           </form>
@@ -132,11 +155,11 @@ export default function LoginPage() {
               <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-card px-2 text-muted-foreground">or continue with</span>
+              <span className="bg-card px-2 text-muted-foreground">or sign up with</span>
             </div>
           </div>
 
-          {/* Social Login */}
+          {/* Social Signup */}
           <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" className="border-border hover:bg-secondary/50 hover:border-primary/50">
               <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
@@ -155,11 +178,11 @@ export default function LoginPage() {
             </Button>
           </div>
 
-          {/* Sign up link */}
+          {/* Login link */}
           <p className="text-center text-sm text-muted-foreground">
-            {"Don't have an account? "}
-            <Link href="/signup" className="text-primary hover:text-primary/80 transition-colors font-medium">
-              Sign up
+            Already have an account?{" "}
+            <Link href="/login" className="text-primary hover:text-primary/80 transition-colors font-medium">
+              Sign in
             </Link>
           </p>
         </div>
