@@ -409,54 +409,14 @@ export async function POST(request: NextRequest) {
   console.log('=== Ultimate Aylnor.ai API Request Started ===');
   
   try {
-    let messages, model, context, userId, sessionId, fileData;
-    
-    const contentType = request.headers.get('content-type') || '';
-    
-    if (contentType.includes('multipart/form-data')) {
-      // Handle FormData (for file uploads)
-      const formData = await request.formData();
-      messages = JSON.parse(formData.get('messages') as string);
-      model = formData.get('model') as string || 'auto';
-      context = formData.get('context') as string || 'general';
-      userId = formData.get('userId') as string;
-      sessionId = formData.get('sessionId') as string;
-      
-      // Handle file upload
-      const file = formData.get('file') as File;
-      if (file) {
-        console.log('File uploaded:', file.name, file.type, file.size);
-        
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-        
-        // For text files, read content
-        if (file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
-          fileData = {
-            name: file.name,
-            type: file.type,
-            content: buffer.toString('utf-8')
-          };
-        } else {
-          // For other files, save info
-          fileData = {
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            content: `ملف ${file.name} (${file.type}, ${(file.size / 1024).toFixed(2)} KB) تم رفعه.`
-          };
-        }
-      }
-    } else {
-      // Handle JSON (for regular chat)
-      const body = await request.json();
-      messages = body.messages;
-      model = body.model || 'auto';
-      context = body.context || 'general';
-      userId = body.userId;
-      sessionId = body.sessionId;
-      fileData = body.file;
-    }
+    // Handle JSON requests (standard for chat and diagnostics)
+    const body = await request.json();
+    const messages = body.messages;
+    const model = body.model || 'auto';
+    const context = body.context || 'general';
+    const userId = body.userId;
+    const sessionId = body.sessionId;
+    const fileData = body.file; // File data as JSON object
     
     console.log('Request data:', { messages: messages?.length, model, context, file: fileData?.name });
     
