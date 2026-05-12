@@ -103,7 +103,7 @@ async function callGrok(messages: ChatMessage[], context?: string, file?: any): 
   //     'Content-Type': 'application/json',
   //   },
   //   body: JSON.stringify({
-  //     model: 'grok-beta',
+  //     model: 'grok-2-latest',
   //     messages: messages,
   //     max_tokens: 2000
   //   })

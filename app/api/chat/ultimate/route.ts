@@ -27,13 +27,13 @@ const AI_MODELS = {
   ],
   grok: [
     {
-      name: 'grok-beta',
+      name: 'grok-2-latest',
       apiKey: process.env.GROK_API_KEY_1,
       provider: 'xai',
       index: 0
     },
     {
-      name: 'grok-beta',
+      name: 'grok-2-latest',
       apiKey: process.env.GROK_API_KEY_2,
       provider: 'xai',
       index: 1
@@ -194,10 +194,12 @@ async function callGrok(messages: ChatMessage[], model: any, context?: string, f
         throw new Error(`Grok rate limit: ${errorText}`);
       }
       
-      if (errorText.includes('invalid_request') || errorText.includes('400')) {
-        console.error('Grok 400 error - request format issue');
-        // Don't retry 400 errors
-        throw new Error(`Grok request format error: ${errorText}`);
+      if (errorText.includes('invalid_request') || errorText.includes('400') || 
+          errorText.includes('Model not found') || errorText.includes('Client specified an invalid argument')) {
+        console.error('Grok model not found or invalid request - will fallback to Gemini');
+        // Mark this key as failed to prevent repeated attempts
+        failedKeys.add(`grok-${model.index}`);
+        throw new Error(`Grok model not found: ${errorText}`);
       }
       
       failedKeys.add(`grok-${model.index}`);
@@ -226,11 +228,13 @@ async function callGrok(messages: ChatMessage[], model: any, context?: string, f
       throw new Error(`Grok rate limit: ${errorMessage}`);
     }
     
-    // Check for 400/invalid request errors
-    if (errorMessage.includes('400') || errorMessage.includes('invalid_request')) {
-      console.error('Grok 400 error - request format issue');
-      // Don't retry 400 errors
-      throw new Error(`Grok request format error: ${errorMessage}`);
+    // Check for model not found or invalid request errors
+    if (errorMessage.includes('400') || errorMessage.includes('invalid_request') || 
+        errorMessage.includes('Model not found') || errorMessage.includes('Client specified an invalid argument')) {
+      console.error('Grok model not found or invalid request - will fallback to Gemini');
+      // Mark this key as failed to prevent repeated attempts
+      failedKeys.add(`grok-${model.index}`);
+      throw new Error(`Grok model not found: ${errorMessage}`);
     }
     
     failedKeys.add(`grok-${model.index}`);
