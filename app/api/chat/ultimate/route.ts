@@ -13,13 +13,13 @@ const supabase = supabaseUrl && supabaseServiceKey ?
 const AI_MODELS = {
   gemini: [
     {
-      name: 'gemini-1.5-pro',
+      name: 'gemini-1.5-pro', // Updated to more powerful model
       apiKey: process.env.GEMINI_API_KEY_1,
       provider: 'google',
       index: 0
     },
     {
-      name: 'gemini-1.5-flash', 
+      name: 'gemini-2.0-flash-exp', // Latest Gemini model
       apiKey: process.env.GEMINI_API_KEY_2,
       provider: 'google',
       index: 1
@@ -27,13 +27,13 @@ const AI_MODELS = {
   ],
   grok: [
     {
-      name: 'gemini-1.5-flash', // Fallback to working Gemini model
+      name: 'Llama 3.1 8B', // Fallback to working Gemini model
       apiKey: process.env.GEMINI_API_KEY_1,
       provider: 'google', // Use Google provider instead of xAI
       index: 0
     },
     {
-      name: 'gemini-1.5-pro', // Fallback to working Gemini model
+      name: 'groq/compound', // Fallback to working Gemini model
       apiKey: process.env.GEMINI_API_KEY_2,
       provider: 'google', // Use Google provider instead of xAI
       index: 1
@@ -45,6 +45,9 @@ const AI_MODELS = {
 let currentModelIndex = { gemini: 0, grok: 0 };
 let modelUsage = { gemini: 0, grok: 0 };
 let failedKeys = new Set<string>();
+
+// Global request counter for Round Robin rotation
+let globalRequestCounter = 0;
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -207,25 +210,6 @@ async function callGrok(messages: ChatMessage[], model: any, context?: string, f
   }
 }
 
-// Get next available model with intelligent failover
-function getNextModel(provider: 'gemini' | 'grok') {
-  console.log(`Getting next available model for ${provider}`);
-  
-  const models = AI_MODELS[provider];
-  
-  // Try all models for this provider
-  for (let i = 0; i < models.length; i++) {
-    const model = models[i as any];
-    const keyId = `${provider}-${i}`;
-    
-    if (model.apiKey && !failedKeys.has(keyId)) {
-      console.log(`Found available ${provider} model: ${model.name} (key ${i})`);
-      currentModelIndex[provider] = i;
-      return { ...model, keyId };
-    }
-  }
-}
-
 // Save chat to Supabase
 async function saveChatToSupabase(
   userId: string,
@@ -264,6 +248,29 @@ async function saveChatToSupabase(
   } catch (error) {
     console.error('Database error:', error);
   }
+}
+
+// Get next available model with Round Robin rotation
+function getNextModel(provider: 'gemini' | 'grok') {
+  console.log(`Getting next available model for ${provider}`);
+  
+  const models = AI_MODELS[provider];
+  const totalModels = models.length;
+  
+  // Round Robin: cycle through all models
+  for (let i = 0; i < totalModels; i++) {
+    const modelIndex = (globalRequestCounter + i) % totalModels;
+    const model = models[modelIndex];
+    
+    if (model.apiKey && !failedKeys.has(`${provider}-${modelIndex}`)) {
+      console.log(`Found available ${provider} model: ${model.name} (key ${modelIndex}) - Round Robin selection`);
+      currentModelIndex[provider] = modelIndex;
+      return { ...model, keyId: `${provider}-${modelIndex}` };
+    }
+  }
+  
+  console.log(`No available ${provider} models found`);
+  return null;
 }
 
 // Main handler with intelligent switching
@@ -377,6 +384,10 @@ async function handleUltimateChat(
 
 export async function POST(request: NextRequest) {
   console.log('=== Ultimate Aylnor.ai API Request Started ===');
+  
+  // Increment global request counter for Round Robin rotation
+  globalRequestCounter++;
+  console.log(`Request #${globalRequestCounter} - Using Round Robin rotation`);
   
   try {
     // Handle JSON requests (standard for chat and diagnostics)
