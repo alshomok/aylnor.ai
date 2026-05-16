@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 import { KeyManager } from './key-manager';
+import { createProviderManagerFromEnv } from './ai/provider-manager';
 
 // Collect Gemini API keys, removing empty ones
 const geminiKeys = [
@@ -356,79 +357,16 @@ async function callMixtral(prompt: string, language?: string): Promise<AIRespons
 
 // Main AI service function with token-aware model selection
 export async function getAIResponse(request: AIRequest): Promise<AIResponse> {
-  const { prompt, mode, image, language, userId } = request;
-  
-  // Select model based on token availability
-  const selectedModel = selectModelWithTokens(mode, !!image);
-  const selectedTool = selectAIToolForModel(selectedModel, !!image);
-  
+  // Use provider manager for automatic failover across Groq and Gemini
+  const providerManager = createProviderManagerFromEnv();
   try {
-    let response: AIResponse;
-    
-    switch (selectedTool) {
-      case 'gemini-pro':
-        response = await callGeminiPro(prompt);
-        break;
-      
-      case 'gemini-pro-vision':
-        if (!image) {
-          throw new Error('Image required for Gemini Pro Vision');
-        }
-        response = await callGeminiProVision(prompt, image);
-        break;
-      
-      case 'llama3-70b':
-        response = await callLlama3(prompt);
-        break;
-      
-      case 'mixtral-8x7b':
-        response = await callMixtral(prompt, language);
-        break;
-      
-      default:
-        throw new Error(`Unknown AI tool: ${selectedTool}`);
-    }
-    
-    // Deduct tokens from the model that was actually used
-    tokenTracker.deductTokens(response.modelUsed, response.tokensUsed);
-    
-    return response;
-  } catch (error) {
-    console.error('AI service error:', error);
-    
-    // If all attempts failed, try transitioning to another model
-    const models: ModelType[] = ['fast', 'meditate', 'code'];
-    for (const model of models) {
-      if (model !== selectedModel && tokenTracker.hasTokens(model)) {
-        try {
-          const fallbackTool = selectAIToolForModel(model, !!image);
-          let response: AIResponse;
-          
-          switch (fallbackTool) {
-            case 'llama3-70b':
-              response = await callLlama3(prompt);
-              break;
-            case 'gemini-pro':
-              response = await callGeminiPro(prompt);
-              break;
-            case 'mixtral-8x7b':
-              response = await callMixtral(prompt, language);
-              break;
-            default:
-              continue;
-          }
-          
-          console.log(`Successfully transitioned to ${model} model`);
-          tokenTracker.deductTokens(response.modelUsed, response.tokensUsed);
-          return response;
-        } catch (modelError) {
-          console.error(`Model ${model} also failed:`, modelError);
-          continue;
-        }
-      }
-    }
-    
-    throw new Error('All AI models failed');
+    const res = await providerManager.request(request);
+    // Deduct tokens for bookkeeping (approximate)
+    tokenTracker.deductTokens(res.modelUsed, res.tokensUsed || 0);
+    return res;
+  } catch (err) {
+    console.error('AI service: all providers failed', err instanceof Error ? err.message : err);
+    throw new Error('AI service unavailable');
   }
 }
 
