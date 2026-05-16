@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-// Define __dirname in pure ESM without importing Node-only modules (`url` or `path`).
-// This approach uses the module URL and is compatible with Edge runtimes
-// (no `require` or Node built-ins needed).
-// It yields the directory of the current module.
-const __dirname = new URL('.', import.meta.url).pathname;
+// Define __dirname in ESM using fileURLToPath and dirname
+// Step 1: Convert the module file URL to an absolute file path
+const __filename = fileURLToPath(import.meta.url);
+// Step 2: Extract the directory name (equivalent to CommonJS __dirname)
+const __dirname = dirname(__filename);
 
 // Authentication is enabled by default
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED !== 'false';
