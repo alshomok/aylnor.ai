@@ -1,11 +1,26 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
+import { KeyManager } from './key-manager';
 
-// Initialize AI clients with multiple API keys for redundancy
-const geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const geminiClientReserve = new GoogleGenerativeAI(process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY!);
-const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY! });
-const groqClientReserve = new Groq({ apiKey: process.env.GROQ_API_KEY_2 || process.env.GROQ_API_KEY! });
+// Initialize KeyManager for Gemini with 4 keys
+const geminiKeyManager = new KeyManager([
+  process.env.GEMINI_API_KEY_1!,
+  process.env.GEMINI_API_KEY_2!,
+  process.env.GEMINI_API_KEY_3!,
+  process.env.GEMINI_API_KEY_4!,
+].filter(Boolean));
+
+// Initialize KeyManager for Groq with 4 keys
+const groqKeyManager = new KeyManager([
+  process.env.GROK_API_KEY_1!,
+  process.env.GROK_API_KEY_2!,
+  process.env.GROK_API_KEY_3!,
+  process.env.GROK_API_KEY_4!,
+].filter(Boolean));
+
+// Initialize AI clients with dynamic key management
+const geminiClient = new GoogleGenerativeAI(geminiKeyManager.getActiveKey());
+const groqClient = new Groq({ apiKey: groqKeyManager.getActiveKey() });
 
 export type AIMode = 'fast' | 'thoughtful' | 'programming';
 export type AITool = 'gemini-pro' | 'gemini-pro-vision' | 'llama3-70b' | 'mixtral-8x7b';
@@ -167,84 +182,116 @@ function selectAIToolForModel(model: ModelType, hasImage: boolean): AITool {
 }
 
 // Gemini Pro for academic content
-async function callGeminiPro(prompt: string, useReserve: boolean = false): Promise<AIResponse> {
-  const client = useReserve ? geminiClientReserve : geminiClient;
-  const model = client.getGenerativeModel({ model: 'gemini-pro' });
-  
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const text = response.text();
-  
-  return {
-    content: text,
-    tool: 'gemini-pro',
-    tokensUsed: response.usageMetadata?.totalTokenCount || 0,
-    modelUsed: 'meditate',
-    isReserve: useReserve,
-  };
+async function callGeminiPro(prompt: string): Promise<AIResponse> {
+  try {
+    const apiKey = geminiKeyManager.getActiveKey();
+    const client = new GoogleGenerativeAI(apiKey);
+    const model = client.getGenerativeModel({ model: 'gemini-pro' });
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    
+    geminiKeyManager.reportSuccess();
+    
+    return {
+      content: text,
+      tool: 'gemini-pro',
+      tokensUsed: response.usageMetadata?.totalTokenCount || 0,
+      modelUsed: 'meditate',
+      isReserve: false,
+    };
+  } catch (error) {
+    geminiKeyManager.reportFailure(error as Error);
+    throw error;
+  }
 }
 
 // Gemini Pro Vision for code analysis
-async function callGeminiProVision(prompt: string, image: string, useReserve: boolean = false): Promise<AIResponse> {
-  const client = useReserve ? geminiClientReserve : geminiClient;
-  const model = client.getGenerativeModel({ model: 'gemini-pro-vision' });
-  
-  const result = await model.generateContent([prompt, image]);
-  const response = await result.response;
-  const text = response.text();
-  
-  return {
-    content: text,
-    tool: 'gemini-pro-vision',
-    tokensUsed: response.usageMetadata?.totalTokenCount || 0,
-    modelUsed: 'meditate',
-    isReserve: useReserve,
-  };
+async function callGeminiProVision(prompt: string, image: string): Promise<AIResponse> {
+  try {
+    const apiKey = geminiKeyManager.getActiveKey();
+    const client = new GoogleGenerativeAI(apiKey);
+    const model = client.getGenerativeModel({ model: 'gemini-pro-vision' });
+    
+    const result = await model.generateContent([prompt, image]);
+    const response = await result.response;
+    const text = response.text();
+    
+    geminiKeyManager.reportSuccess();
+    
+    return {
+      content: text,
+      tool: 'gemini-pro-vision',
+      tokensUsed: response.usageMetadata?.totalTokenCount || 0,
+      modelUsed: 'meditate',
+      isReserve: false,
+    };
+  } catch (error) {
+    geminiKeyManager.reportFailure(error as Error);
+    throw error;
+  }
 }
 
 // Llama 3 70B for fast responses
-async function callLlama3(prompt: string, useReserve: boolean = false): Promise<AIResponse> {
-  const client = useReserve ? groqClientReserve : groqClient;
-  const completion = await client.chat.completions.create({
-    messages: [{ role: 'user', content: prompt }],
-    model: 'llama3-70b-8192',
-    temperature: 0.7,
-    max_tokens: 2048,
-  });
-  
-  return {
-    content: completion.choices[0]?.message?.content || '',
-    tool: 'llama3-70b',
-    tokensUsed: completion.usage?.total_tokens || 0,
-    modelUsed: 'fast',
-    isReserve: useReserve,
-  };
+async function callLlama3(prompt: string): Promise<AIResponse> {
+  try {
+    const apiKey = groqKeyManager.getActiveKey();
+    const client = new Groq({ apiKey });
+    const completion = await client.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'llama3-70b-8192',
+      temperature: 0.7,
+      max_tokens: 2048,
+    });
+    
+    groqKeyManager.reportSuccess();
+    
+    return {
+      content: completion.choices[0]?.message?.content || '',
+      tool: 'llama3-70b',
+      tokensUsed: completion.usage?.total_tokens || 0,
+      modelUsed: 'fast',
+      isReserve: false,
+    };
+  } catch (error) {
+    groqKeyManager.reportFailure(error as Error);
+    throw error;
+  }
 }
 
 // Mixtral 8x7B for code generation
-async function callMixtral(prompt: string, language?: string, useReserve: boolean = false): Promise<AIResponse> {
-  const client = useReserve ? groqClientReserve : groqClient;
-  const systemPrompt = language 
-    ? `You are an expert ${language} programmer. Provide clean, well-commented code.`
-    : 'You are an expert programmer. Provide clean, well-commented code.';
-  
-  const completion = await client.chat.completions.create({
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: prompt },
-    ],
-    model: 'mixtral-8x7b-32768',
-    temperature: 0.3,
-    max_tokens: 4096,
-  });
-  
-  return {
-    content: completion.choices[0]?.message?.content || '',
-    tool: 'mixtral-8x7b',
-    tokensUsed: completion.usage?.total_tokens || 0,
-    modelUsed: 'code',
-    isReserve: useReserve,
-  };
+async function callMixtral(prompt: string, language?: string): Promise<AIResponse> {
+  try {
+    const apiKey = groqKeyManager.getActiveKey();
+    const client = new Groq({ apiKey });
+    const systemPrompt = language 
+      ? `You are an expert ${language} programmer. Provide clean, well-commented code.`
+      : 'You are an expert programmer. Provide clean, well-commented code.';
+    
+    const completion = await client.chat.completions.create({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+      model: 'mixtral-8x7b-32768',
+      temperature: 0.3,
+      max_tokens: 4096,
+    });
+    
+    groqKeyManager.reportSuccess();
+    
+    return {
+      content: completion.choices[0]?.message?.content || '',
+      tool: 'mixtral-8x7b',
+      tokensUsed: completion.usage?.total_tokens || 0,
+      modelUsed: 'code',
+      isReserve: false,
+    };
+  } catch (error) {
+    groqKeyManager.reportFailure(error as Error);
+    throw error;
+  }
 }
 
 // Main AI service function with token-aware model selection
@@ -255,30 +302,27 @@ export async function getAIResponse(request: AIRequest): Promise<AIResponse> {
   const selectedModel = selectModelWithTokens(mode, !!image);
   const selectedTool = selectAIToolForModel(selectedModel, !!image);
   
-  // Check if selected model has tokens, if not try reserve
-  let useReserve = !tokenTracker.hasTokens(selectedModel);
-  
   try {
     let response: AIResponse;
     
     switch (selectedTool) {
       case 'gemini-pro':
-        response = await callGeminiPro(prompt, useReserve);
+        response = await callGeminiPro(prompt);
         break;
       
       case 'gemini-pro-vision':
         if (!image) {
           throw new Error('Image required for Gemini Pro Vision');
         }
-        response = await callGeminiProVision(prompt, image, useReserve);
+        response = await callGeminiProVision(prompt, image);
         break;
       
       case 'llama3-70b':
-        response = await callLlama3(prompt, useReserve);
+        response = await callLlama3(prompt);
         break;
       
       case 'mixtral-8x7b':
-        response = await callMixtral(prompt, language, useReserve);
+        response = await callMixtral(prompt, language);
         break;
       
       default:
@@ -291,36 +335,6 @@ export async function getAIResponse(request: AIRequest): Promise<AIResponse> {
     return response;
   } catch (error) {
     console.error('AI service error:', error);
-    
-    // If primary client failed, try reserve client
-    if (!useReserve) {
-      try {
-        useReserve = true;
-        let response: AIResponse;
-        
-        switch (selectedTool) {
-          case 'gemini-pro':
-            response = await callGeminiPro(prompt, true);
-            break;
-          case 'gemini-pro-vision':
-            response = await callGeminiProVision(prompt, image!, true);
-            break;
-          case 'llama3-70b':
-            response = await callLlama3(prompt, true);
-            break;
-          case 'mixtral-8x7b':
-            response = await callMixtral(prompt, language, true);
-            break;
-          default:
-            throw new Error(`Unknown AI tool: ${selectedTool}`);
-        }
-        
-        tokenTracker.deductTokens(response.modelUsed, response.tokensUsed);
-        return response;
-      } catch (fallbackError) {
-        console.error('Reserve AI service error:', fallbackError);
-      }
-    }
     
     // If all attempts failed, try transitioning to another model
     const models: ModelType[] = ['fast', 'meditate', 'code'];
@@ -366,30 +380,35 @@ export async function* streamAIResponse(request: AIRequest): AsyncGenerator<stri
   const selectedModel = selectModelWithTokens(mode, !!image);
   const selectedTool = selectAIToolForModel(selectedModel, !!image);
   
-  // Check if selected model has tokens, if not try reserve
-  let useReserve = !tokenTracker.hasTokens(selectedModel);
-  
   if (selectedTool === 'llama3-70b' || selectedTool === 'mixtral-8x7b') {
-    const client = useReserve ? groqClientReserve : groqClient;
-    const stream = await client.chat.completions.create({
-      messages: [{ role: 'user', content: prompt }],
-      model: selectedTool === 'llama3-70b' ? 'llama3-70b-8192' : 'mixtral-8x7b-32768',
-      temperature: selectedTool === 'llama3-70b' ? 0.7 : 0.3,
-      max_tokens: selectedTool === 'llama3-70b' ? 2048 : 4096,
-      stream: true,
-    });
-    
-    // Stream the content
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      if (content) {
-        yield content;
+    try {
+      const apiKey = groqKeyManager.getActiveKey();
+      const client = new Groq({ apiKey });
+      const stream = await client.chat.completions.create({
+        messages: [{ role: 'user', content: prompt }],
+        model: selectedTool === 'llama3-70b' ? 'llama3-70b-8192' : 'mixtral-8x7b-32768',
+        temperature: selectedTool === 'llama3-70b' ? 0.7 : 0.3,
+        max_tokens: selectedTool === 'llama3-70b' ? 2048 : 4096,
+        stream: true,
+      });
+      
+      // Stream the content
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          yield content;
+        }
       }
+      
+      groqKeyManager.reportSuccess();
+      
+      // Estimate token usage for streaming (approximate)
+      const estimatedTokens = Math.ceil(prompt.length / 4) + (selectedTool === 'llama3-70b' ? 2048 : 4096);
+      tokenTracker.deductTokens(selectedModel, estimatedTokens);
+    } catch (error) {
+      groqKeyManager.reportFailure(error as Error);
+      throw error;
     }
-    
-    // Estimate token usage for streaming (approximate)
-    const estimatedTokens = Math.ceil(prompt.length / 4) + (selectedTool === 'llama3-70b' ? 2048 : 4096);
-    tokenTracker.deductTokens(selectedModel, estimatedTokens);
   } else {
     // For Gemini, we'll use non-streaming for now
     const response = await getAIResponse(request);
