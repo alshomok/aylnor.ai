@@ -2,25 +2,37 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 import { KeyManager } from './key-manager';
 
-// Initialize KeyManager for Gemini with 4 keys
-const geminiKeyManager = new KeyManager([
-  process.env.GEMINI_API_KEY_1!,
-  process.env.GEMINI_API_KEY_2!,
-  process.env.GEMINI_API_KEY_3!,
-  process.env.GEMINI_API_KEY_4!,
-].filter(Boolean));
+// Collect Gemini API keys, removing empty ones
+const geminiKeys = [
+  process.env.GEMINI_API_KEY_1,
+  process.env.GEMINI_API_KEY_2,
+  process.env.GEMINI_API_KEY_3,
+  process.env.GEMINI_API_KEY_4,
+].filter(Boolean) as string[];
 
-// Initialize KeyManager for Groq with 4 keys
-const groqKeyManager = new KeyManager([
-  process.env.GROK_API_KEY_1!,
-  process.env.GROK_API_KEY_2!,
-  process.env.GROK_API_KEY_3!,
-  process.env.GROK_API_KEY_4!,
-].filter(Boolean));
+if (geminiKeys.length === 0) {
+  console.warn('Warning: No Gemini API keys found. Gemini services will be unavailable.');
+}
 
-// Initialize AI clients with dynamic key management
-const geminiClient = new GoogleGenerativeAI(geminiKeyManager.getActiveKey());
-const groqClient = new Groq({ apiKey: groqKeyManager.getActiveKey() });
+// Collect Groq API keys, removing empty ones
+const groqKeys = [
+  process.env.GROQ_API_KEY_1,
+  process.env.GROQ_API_KEY_2,
+  process.env.GROQ_API_KEY_3,
+  process.env.GROQ_API_KEY_4,
+].filter(Boolean) as string[];
+
+if (groqKeys.length === 0) {
+  console.warn('Warning: No Groq API keys found. Groq services will be unavailable.');
+}
+
+// Initialize KeyManager only if keys are available
+const geminiKeyManager = geminiKeys.length > 0 ? new KeyManager(geminiKeys) : null;
+const groqKeyManager = groqKeys.length > 0 ? new KeyManager(groqKeys) : null;
+
+// Initialize AI clients with dynamic key management (only if valid keys exist)
+const geminiClient = geminiKeyManager ? new GoogleGenerativeAI(geminiKeyManager.getActiveKey()) : null;
+const groqClient = groqKeys.length > 0 ? new Groq({ apiKey: groqKeys[0] }) : null;
 
 export type AIMode = 'fast' | 'thoughtful' | 'programming';
 export type AITool = 'gemini-pro' | 'gemini-pro-vision' | 'llama3-70b' | 'mixtral-8x7b';
@@ -183,8 +195,18 @@ function selectAIToolForModel(model: ModelType, hasImage: boolean): AITool {
 
 // Gemini Pro for academic content
 async function callGeminiPro(prompt: string): Promise<AIResponse> {
+  if (!geminiKeyManager || !geminiClient) {
+    console.error('Gemini service is not available - no API keys configured');
+    throw new Error('Gemini service unavailable: no API keys configured');
+  }
+  
   try {
     const apiKey = geminiKeyManager.getActiveKey();
+    if (!apiKey) {
+      console.error('No active Gemini API key available');
+      throw new Error('No active Gemini API key');
+    }
+    
     const client = new GoogleGenerativeAI(apiKey);
     const model = client.getGenerativeModel({ model: 'gemini-pro' });
     
@@ -202,15 +224,27 @@ async function callGeminiPro(prompt: string): Promise<AIResponse> {
       isReserve: false,
     };
   } catch (error) {
-    geminiKeyManager.reportFailure(error as Error);
+    if (geminiKeyManager) {
+      geminiKeyManager.reportFailure(error as Error);
+    }
     throw error;
   }
 }
 
 // Gemini Pro Vision for code analysis
 async function callGeminiProVision(prompt: string, image: string): Promise<AIResponse> {
+  if (!geminiKeyManager || !geminiClient) {
+    console.error('Gemini Vision service is not available - no API keys configured');
+    throw new Error('Gemini Vision service unavailable: no API keys configured');
+  }
+  
   try {
     const apiKey = geminiKeyManager.getActiveKey();
+    if (!apiKey) {
+      console.error('No active Gemini API key available');
+      throw new Error('No active Gemini API key');
+    }
+    
     const client = new GoogleGenerativeAI(apiKey);
     const model = client.getGenerativeModel({ model: 'gemini-pro-vision' });
     
@@ -228,15 +262,27 @@ async function callGeminiProVision(prompt: string, image: string): Promise<AIRes
       isReserve: false,
     };
   } catch (error) {
-    geminiKeyManager.reportFailure(error as Error);
+    if (geminiKeyManager) {
+      geminiKeyManager.reportFailure(error as Error);
+    }
     throw error;
   }
 }
 
 // Llama 3 70B for fast responses
 async function callLlama3(prompt: string): Promise<AIResponse> {
+  if (!groqKeyManager) {
+    console.error('Groq service is not available - no API keys configured');
+    throw new Error('Groq service unavailable: no API keys configured');
+  }
+  
   try {
     const apiKey = groqKeyManager.getActiveKey();
+    if (!apiKey) {
+      console.error('No active Groq API key available');
+      throw new Error('No active Groq API key');
+    }
+    
     const client = new Groq({ apiKey });
     const completion = await client.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
@@ -255,15 +301,27 @@ async function callLlama3(prompt: string): Promise<AIResponse> {
       isReserve: false,
     };
   } catch (error) {
-    groqKeyManager.reportFailure(error as Error);
+    if (groqKeyManager) {
+      groqKeyManager.reportFailure(error as Error);
+    }
     throw error;
   }
 }
 
 // Mixtral 8x7B for code generation
 async function callMixtral(prompt: string, language?: string): Promise<AIResponse> {
+  if (!groqKeyManager) {
+    console.error('Groq service is not available - no API keys configured');
+    throw new Error('Groq service unavailable: no API keys configured');
+  }
+  
   try {
     const apiKey = groqKeyManager.getActiveKey();
+    if (!apiKey) {
+      console.error('No active Groq API key available');
+      throw new Error('No active Groq API key');
+    }
+    
     const client = new Groq({ apiKey });
     const systemPrompt = language 
       ? `You are an expert ${language} programmer. Provide clean, well-commented code.`
@@ -289,7 +347,9 @@ async function callMixtral(prompt: string, language?: string): Promise<AIRespons
       isReserve: false,
     };
   } catch (error) {
-    groqKeyManager.reportFailure(error as Error);
+    if (groqKeyManager) {
+      groqKeyManager.reportFailure(error as Error);
+    }
     throw error;
   }
 }
@@ -381,8 +441,16 @@ export async function* streamAIResponse(request: AIRequest): AsyncGenerator<stri
   const selectedTool = selectAIToolForModel(selectedModel, !!image);
   
   if (selectedTool === 'llama3-70b' || selectedTool === 'mixtral-8x7b') {
+    if (!groqKeyManager) {
+      throw new Error('Groq service unavailable: no API keys configured');
+    }
+    
     try {
       const apiKey = groqKeyManager.getActiveKey();
+      if (!apiKey) {
+        throw new Error('No active Groq API key available');
+      }
+      
       const client = new Groq({ apiKey });
       const stream = await client.chat.completions.create({
         messages: [{ role: 'user', content: prompt }],
@@ -406,7 +474,9 @@ export async function* streamAIResponse(request: AIRequest): AsyncGenerator<stri
       const estimatedTokens = Math.ceil(prompt.length / 4) + (selectedTool === 'llama3-70b' ? 2048 : 4096);
       tokenTracker.deductTokens(selectedModel, estimatedTokens);
     } catch (error) {
-      groqKeyManager.reportFailure(error as Error);
+      if (groqKeyManager) {
+        groqKeyManager.reportFailure(error as Error);
+      }
       throw error;
     }
   } else {

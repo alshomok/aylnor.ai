@@ -37,7 +37,7 @@ Each active model has a corresponding reserve model using a separate API key:
 
 ### Token Management System
 
-The system implements a comprehensive token tracking mechanism:
+The system implements a comprehensive token tracking mechanism with support for both in-memory and database-backed storage:
 
 ```typescript
 class TokenTracker {
@@ -46,6 +46,243 @@ class TokenTracker {
   - Real-time token deduction after each request
   - Token purchase functionality
 }
+```
+
+### Distributed Token Storage Architecture
+
+**CRITICAL**: In a production serverless environment (Vercel), the token tracker **must** reside in a shared database rather than in-memory. In-memory storage is local to each serverless instance and will not persist across function invocations or provide consistency across multiple instances.
+
+#### Using Supabase for Token Storage
+
+Implement a token tracker table in Supabase to maintain consistent token state:
+
+```sql
+-- Create token_tracker table in Supabase
+CREATE TABLE token_tracker (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  model_type TEXT NOT NULL UNIQUE CHECK (model_type IN ('fast', 'meditate', 'code')),
+  available_tokens INTEGER NOT NULL DEFAULT 1000000,
+  total_tokens INTEGER NOT NULL DEFAULT 1000000,
+  last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for faster lookups
+CREATE INDEX idx_token_tracker_model_type ON token_tracker(model_type);
+
+-- Create token purchase history table
+CREATE TABLE token_purchase_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  model_type TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  user_id UUID,
+  purchased_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (model_type) REFERENCES token_tracker(model_type)
+);
+
+-- Set up Row Level Security (RLS) policies
+ALTER TABLE token_tracker ENABLE ROW LEVEL SECURITY;
+ALTER TABLE token_purchase_history ENABLE ROW LEVEL SECURITY;
+```
+
+#### TypeScript Implementation for Supabase-Backed Token Tracker
+
+```typescript
+import { supabaseAdmin } from './supabase';
+
+interface TokenStatus {
+  availableTokens: number;
+  totalTokens: number;
+  lastUpdated: Date;
+}
+
+export class SupabaseTokenTracker {
+  private readonly RESET_INTERVAL = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
+
+  /**
+   * Check if model has available tokens
+   */
+  async hasTokens(model: 'fast' | 'meditate' | 'code'): Promise<boolean> {
+    if (!supabaseAdmin) {
+      console.warn('Supabase admin client not available');
+      return false;
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('token_tracker')
+        .select('available_tokens, last_updated')
+        .eq('model_type', model)
+        .single();
+
+      if (error) {
+        console.error(`Error checking tokens for ${model}:`, error);
+        return false;
+      }
+
+      if (!data) {
+        console.warn(`No token record found for model: ${model}`);
+        return false;
+      }
+
+      // Reset if interval has passed
+      const lastUpdated = new Date(data.last_updated);
+      if (Date.now() - lastUpdated.getTime() > this.RESET_INTERVAL) {
+        await this.resetTokens(model);
+        return true;
+      }
+
+      return data.available_tokens > 0;
+    } catch (error) {
+      console.error('Error checking token availability:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Deduct tokens from a model
+   */
+  async deductTokens(model: 'fast' | 'meditate' | 'code', tokensUsed: number): Promise<void> {
+    if (!supabaseAdmin) {
+      console.warn('Supabase admin client not available');
+      return;
+    }
+
+    try {
+      const { error } = await supabaseAdmin
+        .from('token_tracker')
+        .update({
+          available_tokens: supabaseAdmin.sql`GREATEST(0, available_tokens - ${tokensUsed})`,
+          updated_at: new Date().toISOString()
+        })
+        .eq('model_type', model);
+
+      if (error) {
+        console.error(`Error deducting tokens for ${model}:`, error);
+      }
+    } catch (error) {
+      console.error('Error updating tokens:', error);
+    }
+  }
+
+  /**
+   * Purchase tokens for a model
+   */
+  async purchaseTokens(model: 'fast' | 'meditate' | 'code', amount: number, userId?: string): Promise<void> {
+    if (!supabaseAdmin) {
+      console.warn('Supabase admin client not available');
+      return;
+    }
+
+    try {
+      // Update token balance
+      const { error: updateError } = await supabaseAdmin
+        .from('token_tracker')
+        .update({
+          available_tokens: supabaseAdmin.sql`available_tokens + ${amount}`,
+          total_tokens: supabaseAdmin.sql`total_tokens + ${amount}`,
+          updated_at: new Date().toISOString()
+        })
+        .eq('model_type', model);
+
+      if (updateError) {
+        console.error(`Error updating tokens for ${model}:`, updateError);
+        return;
+      }
+
+      // Record purchase history
+      const { error: historyError } = await supabaseAdmin
+        .from('token_purchase_history')
+        .insert({
+          model_type: model,
+          amount,
+          user_id: userId
+        });
+
+      if (historyError) {
+        console.error('Error recording purchase history:', historyError);
+      }
+
+      console.log(`Successfully purchased ${amount} tokens for ${model} model`);
+    } catch (error) {
+      console.error('Error processing token purchase:', error);
+    }
+  }
+
+  /**
+   * Reset tokens for a model
+   */
+  async resetTokens(model: 'fast' | 'meditate' | 'code'): Promise<void> {
+    if (!supabaseAdmin) {
+      console.warn('Supabase admin client not available');
+      return;
+    }
+
+    try {
+      const { error } = await supabaseAdmin
+        .from('token_tracker')
+        .update({
+          available_tokens: 1000000,
+          total_tokens: 1000000,
+          updated_at: new Date().toISOString()
+        })
+        .eq('model_type', model);
+
+      if (error) {
+        console.error(`Error resetting tokens for ${model}:`, error);
+      } else {
+        console.log(`Tokens reset for ${model} model`);
+      }
+    } catch (error) {
+      console.error('Error resetting tokens:', error);
+    }
+  }
+
+  /**
+   * Get token status for all models
+   */
+  async getAllStatus(): Promise<Record<'fast' | 'meditate' | 'code', TokenStatus>> {
+    if (!supabaseAdmin) {
+      console.warn('Supabase admin client not available');
+      return {};
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('token_tracker')
+        .select('model_type, available_tokens, total_tokens, last_updated');
+
+      if (error) {
+        console.error('Error fetching token status:', error);
+        return {};
+      }
+
+      const status: Record<'fast' | 'meditate' | 'code', TokenStatus> = {
+        fast: { availableTokens: 0, totalTokens: 0, lastUpdated: new Date() },
+        meditate: { availableTokens: 0, totalTokens: 0, lastUpdated: new Date() },
+        code: { availableTokens: 0, totalTokens: 0, lastUpdated: new Date() }
+      };
+
+      data?.forEach((row) => {
+        const modelType = row.model_type as 'fast' | 'meditate' | 'code';
+        status[modelType] = {
+          availableTokens: row.available_tokens,
+          totalTokens: row.total_tokens,
+          lastUpdated: new Date(row.last_updated)
+        };
+      });
+
+      return status;
+    } catch (error) {
+      console.error('Error fetching all token statuses:', error);
+      return {};
+    }
+  }
+}
+
+// Usage in API routes
+export const tokenTracker = new SupabaseTokenTracker();
 ```
 
 ### Model Transition Logic Flow
@@ -254,15 +491,36 @@ export default nextConfig;
 
 ### Cold Start Mitigation
 
-- Token tracker uses in-memory storage (suitable for serverless)
-- Consider Redis for production if persistence is needed
-- Implement connection pooling for AI API clients
+- Token tracker uses Supabase for persistent storage across serverless invocations
+- Alternative: Use Redis for high-performance in-memory caching with persistence
+- Implement connection pooling for AI API clients and database connections
+
+### Database Connection Pooling
+
+For optimal performance with Supabase:
+
+```typescript
+// Connection pooling through Supabase JS client
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(url, key, {
+  auth: {
+    persistSession: false,
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+});
+```
 
 ### Request Optimization
 
 - Streaming responses for Groq models (Llama 3, Mixtral)
 - Non-streaming for Gemini (current limitation)
 - Automatic retry logic with exponential backoff
+- Batch token updates to reduce database calls
 
 ### Monitoring and Logging
 
@@ -272,6 +530,9 @@ console.log(`Transitioning from ${primaryModel} to ${model} due to token exhaust
 
 // API usage tracking
 console.log(`Purchased ${amount} tokens for ${model} model`);
+
+// Database operation logging
+console.log(`Token purchase recorded in Supabase for model: ${model}`);
 ```
 
 ## Testing the Deployment
@@ -332,17 +593,115 @@ Monitor the following metrics in Vercel:
 
 ## Scaling Considerations
 
-### Horizontal Scaling
+### Horizontal Scaling with Supabase
 
-- Each serverless function instance maintains its own token tracker
-- For production, consider Redis for shared token state
-- Implement distributed locking for token purchases
+- Token state is centralized in Supabase, eliminating sync issues across serverless instances
+- Each serverless function instance queries the same database for token status
+- Database row-level locking ensures atomic token updates
+- Use Supabase's real-time subscriptions for live token status updates
+
+```typescript
+// Real-time token updates with Supabase
+supabaseAdmin
+  .channel('token_tracker_updates')
+  .on(
+    'postgres_changes',
+    {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'token_tracker'
+    },
+    (payload) => {
+      console.log('Token status updated:', payload.new);
+    }
+  )
+  .subscribe();
+```
 
 ### Token Pool Management
 
-- Implement token pooling for multiple users
-- Add user-specific token quotas
-- Implement token expiration and renewal
+- Implement token pooling for multiple users per model
+- Add user-specific token quotas via a `user_token_allocation` table
+- Implement token expiration and renewal policies
+- Track token usage per user for analytics and billing
+
+#### User Token Allocation Table
+
+```sql
+CREATE TABLE user_token_allocation (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  model_type TEXT NOT NULL CHECK (model_type IN ('fast', 'meditate', 'code')),
+  allocated_tokens INTEGER NOT NULL,
+  used_tokens INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP WITH TIME ZONE,
+  FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  FOREIGN KEY (model_type) REFERENCES token_tracker(model_type),
+  UNIQUE(user_id, model_type)
+);
+
+-- Track individual request token consumption
+CREATE TABLE token_usage_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  model_type TEXT NOT NULL,
+  tokens_consumed INTEGER NOT NULL,
+  request_id TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  FOREIGN KEY (model_type) REFERENCES token_tracker(model_type)
+);
+```
+
+### Distributed Locking for Token Updates
+
+To prevent race conditions when multiple instances update tokens simultaneously:
+
+```typescript
+import { supabaseAdmin } from './supabase';
+
+export async function updateTokensSafely(
+  model: 'fast' | 'meditate' | 'code',
+  tokensToDeduct: number
+): Promise<boolean> {
+  if (!supabaseAdmin) return false;
+
+  try {
+    // Use a database transaction via Supabase RPC
+    const { data, error } = await supabaseAdmin
+      .rpc('deduct_tokens_safe', {
+        p_model_type: model,
+        p_tokens: tokensToDeduct
+      });
+
+    if (error) {
+      console.error('Error updating tokens safely:', error);
+      return false;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in safe token update:', error);
+    return false;
+  }
+}
+
+// Corresponding PostgreSQL function in Supabase
+// CREATE OR REPLACE FUNCTION deduct_tokens_safe(
+//   p_model_type TEXT,
+//   p_tokens INT
+// ) RETURNS BOOLEAN AS $$
+// BEGIN
+//   UPDATE token_tracker
+//   SET available_tokens = GREATEST(0, available_tokens - p_tokens),
+//       updated_at = CURRENT_TIMESTAMP
+//   WHERE model_type = p_model_type;
+//   RETURN TRUE;
+// EXCEPTION WHEN OTHERS THEN
+//   RETURN FALSE;
+// END;
+// $$ LANGUAGE plpgsql;
 
 ## Conclusion
 
@@ -351,7 +710,15 @@ This token-based AI model system ensures continuous operation of the aylnor.ai a
 1. **Independent Model Operation**: Three models operate independently with dedicated token pools
 2. **Automatic Failover**: Seamless transitions between models when tokens are exhausted
 3. **Reserve System**: Backup API keys ensure operation even during primary key failures
-4. **Token Management**: Comprehensive API for purchasing and monitoring tokens
-5. **Vercel Optimization**: Designed for serverless architecture with cold start mitigation
+4. **Database-Backed Token Management**: Supabase provides persistent, consistent token tracking across all serverless instances
+5. **Distributed Consistency**: Centralized token state prevents synchronization issues in serverless environments
+6. **Real-time Monitoring**: Track token usage with Supabase's real-time subscriptions
+7. **Vercel Optimization**: Designed for serverless architecture with proper state management
+
+**Key Implementation Note**: The token tracker is now backed by Supabase's PostgreSQL database rather than in-memory storage. This critical change ensures:
+- Token state persists across serverless function invocations
+- Multiple instances remain synchronized
+- Atomic operations prevent race conditions
+- Real-time visibility into token usage and status
 
 The system guarantees that the bot remains operational at all times, providing users with uninterrupted AI assistance regardless of token availability or API key status.
