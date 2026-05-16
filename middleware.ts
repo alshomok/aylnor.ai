@@ -2,10 +2,6 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-// Edge-compatible __dirname alternative - avoids Node built-ins `url` and `path`.
-// Use this when running in Edge runtimes where Node modules are not available.
-const __dirname = new URL('.', import.meta.url).pathname;
-
 // Authentication is enabled by default
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED !== 'false';
 
