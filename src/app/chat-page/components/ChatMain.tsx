@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { BotMode, Message, Conversation } from './ChatPageClient';
 import CodeDisplayPanel from './CodeDisplayPanel';
+import { useAuth } from '@/contexts/auth-context';
 
 interface ChatMainProps {
   messages: Message[];
@@ -102,6 +103,7 @@ export default function ChatMain({
   conversations,
   setConversations,
 }: ChatMainProps) {
+  const { user } = useAuth();
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
@@ -121,6 +123,16 @@ export default function ChatMain({
   const handleSend = async () => {
     const content = inputValue.trim();
     if (!content || isTyping) return;
+
+    if (!activeConvId) {
+      console.warn('No active conversation');
+      return;
+    }
+
+    if (!user?.id) {
+      console.warn('No user ID available');
+      return;
+    }
 
     const userMsg: Message = {
       id: `msg-${Date.now()}-user`,
@@ -154,7 +166,7 @@ export default function ChatMain({
           conversationId: activeConvId,
           mode: activeMode,
           botPersonality: 'مساعد مفيد ودقيق وأكاديمي',
-          userId: 'demo-user',
+          userId: user.id,
         }),
       });
 

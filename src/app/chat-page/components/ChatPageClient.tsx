@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import ChatSidebar from './ChatSidebar';
 import ChatMain from './ChatMain';
+import { useAuth } from '@/contexts/auth-context';
 
 export type BotMode = 'quick' | 'thoughtful' | 'programming';
 export type Theme = 'dark' | 'light';
@@ -24,6 +25,7 @@ export interface Conversation {
 }
 
 export default function ChatPageClient() {
+  const { user } = useAuth();
   const [theme, setTheme] = useState<Theme>('dark');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeMode, setActiveMode] = useState<BotMode>('thoughtful');
@@ -41,11 +43,17 @@ export default function ChatPageClient() {
   // Load conversations on mount
   useEffect(() => {
     loadConversations();
-  }, []);
+  }, [user]);
 
   const loadConversations = async () => {
+    if (!user?.id) {
+      console.warn('No user ID available');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch('/api/conversations?userId=demo-user');
+      const response = await fetch(`/api/conversations?userId=${user.id}`);
       if (response.ok) {
         const data = await response.json();
         if (data.conversations && data.conversations.length > 0) {
@@ -94,12 +102,17 @@ export default function ChatPageClient() {
   };
 
   const createNewConversation = async () => {
+    if (!user?.id) {
+      console.warn('No user ID available');
+      return;
+    }
+
     try {
       const response = await fetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'demo-user',
+          userId: user.id,
           title: 'محادثة جديدة',
           mode: activeMode,
         }),
