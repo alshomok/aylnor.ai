@@ -108,6 +108,7 @@ export default function ChatMain({
   const { user } = useAuth();
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [activeCodeBlock, setActiveCodeBlock] = useState<{ language: string; code: string } | null>(
     messages.find((m) => m.codeBlock)?.codeBlock ?? null
@@ -122,9 +123,10 @@ export default function ChatMain({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSend = async () => {
+  const sendMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     const content = inputValue.trim();
-    if (!content || isTyping) return;
+    if (!content || isSending) return;
 
     if (!user?.id) {
       console.warn('No user ID available');
@@ -137,6 +139,8 @@ export default function ChatMain({
       return;
     }
 
+    console.debug('Sending message', { conversationId: activeConvId, mode: activeMode });
+
     const userMsg: Message = {
       id: `msg-${Date.now()}-user`,
       role: 'user',
@@ -146,6 +150,7 @@ export default function ChatMain({
 
     setMessages((prev) => [...prev, userMsg]);
     setInputValue('');
+    setIsSending(true);
     setIsTyping(true);
 
     if (activeConv?.title === 'محادثة جديدة') {
@@ -174,6 +179,8 @@ export default function ChatMain({
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Send failed', errorText);
         throw new Error('Failed to get response');
       }
 
@@ -193,6 +200,7 @@ export default function ChatMain({
         setActiveCodeBlock(botMsg.codeBlock);
         setShowCodePanel(true);
       }
+      console.debug('Message sent successfully');
     } catch (error) {
       console.error('Error sending message:', error);
       const botMsg: Message = {
@@ -203,15 +211,16 @@ export default function ChatMain({
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, botMsg]);
+    } finally {
+      setIsSending(false);
+      setIsTyping(false);
     }
-
-    setIsTyping(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      if (!isSending) sendMessage();
     }
   };
 
@@ -471,11 +480,11 @@ export default function ChatMain({
 
         {/* Input area */}
         <div className="px-3 sm:px-4 py-4 border-t border-border bg-card shrink-0">
-          <div className="flex items-end gap-2 bg-input border border-border rounded-2xl px-4 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all flex-row-reverse">
+          <form onSubmit={sendMessage} className="flex items-end gap-2 bg-input border border-border rounded-2xl px-4 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all flex-row-reverse">
             {/* Send button */}
             <button
-              onClick={handleSend}
-              disabled={!inputValue.trim() || isTyping}
+              type="submit"
+              disabled={isSending || !inputValue.trim() || !user?.id || !activeConvId}
               className="btn-primary p-2.5 rounded-xl shrink-0 mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
               title="إرسال الرسالة (Enter)"
             >
@@ -506,13 +515,14 @@ export default function ChatMain({
               }}
             />
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               className="text-muted-foreground hover:text-gold transition-colors p-1 shrink-0 mb-0.5"
               title="إرفاق ملف (PDF، ملفات كود، نصوص)"
             >
               <Paperclip size={18} />
             </button>
-          </div>
+          </form>
           <p className="text-2xs text-muted-foreground text-center mt-2">
             aylnor.ai قد يخطئ. تحقق من المعلومات المهمة بشكل مستقل.
           </p>
