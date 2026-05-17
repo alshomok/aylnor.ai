@@ -201,6 +201,7 @@ export default function ChatPageClient() {
         activeConvId={activeConvId}
         conversations={conversations}
         setConversations={setConversations}
+        onCreateConversation={createNewConversation}
       />
       <ChatSidebar
         open={sidebarOpen}

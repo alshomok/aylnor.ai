@@ -32,6 +32,7 @@ interface ChatMainProps {
   activeConvId: string;
   conversations: Conversation[];
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
+  onCreateConversation: () => Promise<void>;
 }
 
 const BOT_MODES: { id: BotMode; label: string; icon: React.ElementType; description: string }[] = [
@@ -102,6 +103,7 @@ export default function ChatMain({
   activeConvId,
   conversations,
   setConversations,
+  onCreateConversation,
 }: ChatMainProps) {
   const { user } = useAuth();
   const [inputValue, setInputValue] = useState('');
@@ -124,13 +126,14 @@ export default function ChatMain({
     const content = inputValue.trim();
     if (!content || isTyping) return;
 
-    if (!activeConvId) {
-      console.warn('No active conversation');
+    if (!user?.id) {
+      console.warn('No user ID available');
       return;
     }
 
-    if (!user?.id) {
-      console.warn('No user ID available');
+    // Create conversation if none exists
+    if (!activeConvId) {
+      await onCreateConversation();
       return;
     }
 
