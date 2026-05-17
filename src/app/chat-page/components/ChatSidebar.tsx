@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
 import {
   MessageSquare,
@@ -27,6 +28,7 @@ import {
   Info,
 } from 'lucide-react';
 import { BotMode, Conversation, Theme } from './ChatPageClient';
+import { useAuth } from '@/contexts/auth-context';
 
 interface ChatSidebarProps {
   open: boolean;
@@ -81,6 +83,8 @@ export default function ChatSidebar({
   onUsernameChange,
   onNewChat,
 }: ChatSidebarProps) {
+  const { signOut } = useAuth();
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState<'chats' | 'settings' | 'persona'>('chats');
   const [editingBotName, setEditingBotName] = useState(false);
   const [tempBotName, setTempBotName] = useState(botName);
@@ -89,6 +93,11 @@ export default function ChatSidebar({
   const [searchQuery, setSearchQuery] = useState('');
   const [settingsDropdownOpen, setSettingsDropdownOpen] = useState(false);
   const settingsDropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/sign-up-login-screen');
+  };
 
   const filteredConvs = conversations.filter((c) =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -547,13 +556,13 @@ export default function ChatSidebar({
               )}
             </div>
 
-            <Link
-              href="/"
+            <button
+              onClick={handleSignOut}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:bg-red-500/10 transition-colors flex-row-reverse"
             >
               <LogOut size={16} />
               <span className="flex-1 text-right">تسجيل الخروج</span>
-            </Link>
+            </button>
           </>
         ) : (
           <>
@@ -570,13 +579,13 @@ export default function ChatSidebar({
             >
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <Link
-              href="/"
+            <button
+              onClick={handleSignOut}
               className="w-full flex items-center justify-center py-2.5 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors"
               title="تسجيل الخروج"
             >
               <LogOut size={16} />
-            </Link>
+            </button>
           </>
         )}
       </div>

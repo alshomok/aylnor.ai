@@ -1,7 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Loader2, Check } from 'lucide-react';
+import { Loader2, Check, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/auth-context';
 
 interface SignupFormValues {
   fullName: string;
@@ -16,6 +17,8 @@ interface SignupFormProps {
 export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const { signUp } = useAuth();
 
   const {
     register,
@@ -23,12 +26,19 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
     formState: { errors },
   } = useForm<SignupFormValues>();
 
-  const onSubmit = async (_data: SignupFormValues) => {
+  const onSubmit = async (data: SignupFormValues) => {
     setIsLoading(true);
-    // Direct signup without validation
-    await new Promise((r) => setTimeout(r, 1400));
-    setIsLoading(false);
-    setSuccess(true);
+    setAuthError('');
+
+    const { error } = await signUp(data.email, data.password, data.fullName);
+
+    if (error) {
+      setAuthError(error.message || 'فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.');
+      setIsLoading(false);
+    } else {
+      setIsLoading(false);
+      setSuccess(true);
+    }
   };
 
   if (success) {
@@ -56,8 +66,17 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
     <div>
       <div className="mb-8 text-right">
         <h1 className="text-2xl font-bold text-foreground mb-1">إنشاء حسابك</h1>
-        <p className="text-sm text-muted-foreground">مجاني للأبد. لا حاجة لبطاقة ائتمان.</p>
+        <p className="text-sm text-muted-foreground">
+          مجاني للأبد. لا حاجة لبطاقة ائتمان.
+        </p>
       </div>
+
+      {authError && (
+        <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/25 rounded-xl px-4 py-3 mb-6 flex-row-reverse">
+          <AlertCircle size={16} className="text-red-400 mt-0.5 shrink-0" />
+          <p className="text-sm text-red-400 text-right">{authError}</p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
         {/* Full name */}

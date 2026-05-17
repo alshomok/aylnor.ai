@@ -1,7 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/auth-context';
 
 interface LoginFormValues {
   email: string;
@@ -14,6 +15,8 @@ interface LoginFormProps {
 
 export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const { signIn } = useAuth();
 
   const {
     register,
@@ -23,9 +26,17 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
 
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
-    // Direct login without validation
-    window.location.href = '/chat-page';
-    setIsLoading(false);
+    setAuthError('');
+
+    const { error } = await signIn(data.email, data.password);
+
+    if (error) {
+      setAuthError(error.message || 'فشل تسجيل الدخول. يرجى المحاولة مرة أخرى.');
+      setIsLoading(false);
+    } else {
+      // Redirect to chat page on successful login
+      window.location.href = '/chat-page';
+    }
   };
 
   return (
@@ -34,6 +45,13 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
         <h1 className="text-2xl font-bold text-foreground mb-1">مرحباً بعودتك</h1>
         <p className="text-sm text-muted-foreground">سجّل الدخول إلى حساب aylnor.ai الخاص بك</p>
       </div>
+
+      {authError && (
+        <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/25 rounded-xl px-4 py-3 mb-6 flex-row-reverse">
+          <AlertCircle size={16} className="text-red-400 mt-0.5 shrink-0" />
+          <p className="text-sm text-red-400 text-right">{authError}</p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
         {/* Email */}
