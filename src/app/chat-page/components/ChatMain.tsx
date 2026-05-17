@@ -148,6 +148,8 @@ export default function ChatMain({
     // Create conversation if none exists
     if (!activeConvId) {
       await onCreateConversation();
+      // Wait a moment for conversation to be created
+      setTimeout(() => sendMessage(), 500);
       return;
     }
 
