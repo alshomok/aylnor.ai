@@ -496,7 +496,7 @@ export default function ChatMain({
             {/* Send button */}
             <button
               onClick={() => sendMessage()}
-              disabled={isSending || !inputValue.trim() || !user?.id || !activeConvId}
+              disabled={isSending || !inputValue.trim()}
               className="btn-primary p-2.5 rounded-xl shrink-0 mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
               title="إرسال الرسالة (Enter)"
             >
