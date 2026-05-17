@@ -37,13 +37,17 @@ export default function ChatPageClient() {
   const [botPersonality, setBotPersonality] = useState('مساعد مفيد ودقيق وأكاديمي');
   const [username, setUsername] = useState('أمارا أوسي');
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const themeClass = theme === 'light' ? 'light' : '';
 
   // Load conversations on mount
   useEffect(() => {
-    loadConversations();
-  }, [user]);
+    if (!hasLoaded && user?.id) {
+      loadConversations();
+      setHasLoaded(true);
+    }
+  }, [user, hasLoaded]);
 
   const loadConversations = async () => {
     if (!user?.id) {
