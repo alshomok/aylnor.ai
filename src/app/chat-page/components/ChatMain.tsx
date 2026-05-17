@@ -123,6 +123,18 @@ export default function ChatMain({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  // Debug: log button state
+  useEffect(() => {
+    console.debug('Button state:', {
+      isSending,
+      hasContent: inputValue.trim().length > 0,
+      hasUser: !!user?.id,
+      hasConversation: !!activeConvId,
+      userId: user?.id,
+      conversationId: activeConvId,
+    });
+  }, [isSending, inputValue, user, activeConvId]);
+
   const sendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const content = inputValue.trim();
@@ -480,10 +492,10 @@ export default function ChatMain({
 
         {/* Input area */}
         <div className="px-3 sm:px-4 py-4 border-t border-border bg-card shrink-0">
-          <form onSubmit={sendMessage} className="flex items-end gap-2 bg-input border border-border rounded-2xl px-4 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all flex-row-reverse">
+          <div className="flex items-end gap-2 bg-input border border-border rounded-2xl px-4 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all flex-row-reverse">
             {/* Send button */}
             <button
-              type="submit"
+              onClick={() => sendMessage()}
               disabled={isSending || !inputValue.trim() || !user?.id || !activeConvId}
               className="btn-primary p-2.5 rounded-xl shrink-0 mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
               title="إرسال الرسالة (Enter)"
@@ -522,7 +534,7 @@ export default function ChatMain({
             >
               <Paperclip size={18} />
             </button>
-          </form>
+          </div>
           <p className="text-2xs text-muted-foreground text-center mt-2">
             aylnor.ai قد يخطئ. تحقق من المعلومات المهمة بشكل مستقل.
           </p>
