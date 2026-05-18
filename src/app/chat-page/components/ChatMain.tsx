@@ -14,6 +14,7 @@ import {
   RotateCcw,
   ThumbsUp,
   ThumbsDown,
+  ChevronDown,
 } from 'lucide-react';
 import { BotMode, Message, Conversation } from './ChatPageClient';
 import CodeDisplayPanel from './CodeDisplayPanel';
@@ -118,6 +119,7 @@ export default function ChatMain({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeConv = conversations.find((c) => c.id === activeConvId);
+  const [showModeDropdown, setShowModeDropdown] = useState(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -487,6 +489,44 @@ export default function ChatMain({
             >
               <Send size={16} className="rotate-180" />
             </button>
+
+            {/* Mode dropdown */}
+            <div className="relative shrink-0 mb-0.5">
+              <button
+                onClick={() => setShowModeDropdown(!showModeDropdown)}
+                className="flex items-center gap-1 px-3 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors text-sm"
+                title="اختر وضع البوت"
+              >
+                {BOT_MODES.find((m) => m.id === activeMode)?.icon && (
+                  React.createElement(BOT_MODES.find((m) => m.id === activeMode)!.icon, { size: 14 })
+                )}
+                <span className="text-xs">{BOT_MODES.find((m) => m.id === activeMode)?.label}</span>
+                <ChevronDown size={12} />
+              </button>
+
+              {showModeDropdown && (
+                <div className="absolute bottom-full right-0 mb-2 w-48 bg-card border border-border rounded-lg shadow-lg z-50">
+                  {BOT_MODES.map((mode) => (
+                    <button
+                      key={mode.id}
+                      onClick={() => {
+                        setActiveMode(mode.id);
+                        setShowModeDropdown(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-right hover:bg-muted/50 transition-colors ${
+                        activeMode === mode.id ? 'bg-muted' : ''
+                      }`}
+                    >
+                      {React.createElement(mode.icon, { size: 14 })}
+                      <div className="flex-1">
+                        <div className="font-medium">{mode.label}</div>
+                        <div className="text-xs text-muted-foreground">{mode.description}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <textarea
               ref={textareaRef}

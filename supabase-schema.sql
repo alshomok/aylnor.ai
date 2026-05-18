@@ -56,42 +56,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger to call the function on new user signup
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
+CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Update RLS policies to work with Supabase Auth
-CREATE POLICY "Users can view own data" ON users FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can insert own data" ON users FOR INSERT WITH CHECK (auth.uid() = id);
-CREATE POLICY "Users can update own data" ON users FOR UPDATE USING (auth.uid() = id);
-
-CREATE POLICY "Users can view their conversations" ON conversations FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can create their conversations" ON conversations FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update their conversations" ON conversations FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete their conversations" ON conversations FOR DELETE USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can view messages from their conversations" ON messages FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM conversations
-    WHERE conversations.id = messages.conversation_id
-    AND conversations.user_id = auth.uid()
-  )
-);
-CREATE POLICY "Users can create messages in their conversations" ON messages FOR INSERT WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM conversations
-    WHERE conversations.id = messages.conversation_id
-    AND conversations.user_id = auth.uid()
-  )
-);
 
 -- Fix: Drop existing policies and recreate with proper checks
 DROP POLICY IF EXISTS "Users can create their conversations" ON conversations;
 DROP POLICY IF EXISTS "Users can create messages in their conversations" ON messages;
-
--- Recreate INSERT policies with proper checks
 CREATE POLICY "Users can create their conversations" ON conversations
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
