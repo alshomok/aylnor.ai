@@ -135,6 +135,22 @@ export default function ChatPageClient() {
       if (!response.ok) {
         const errorData = await response.json();
         console.error('Failed to create conversation:', response.status, errorData);
+        // Use fallback local state if foreign key constraint error
+        if (errorData.details?.includes('foreign key constraint')) {
+          console.warn('Using fallback local state due to foreign key constraint');
+          const newId = `conv-${Date.now()}`;
+          const newConv: Conversation = {
+            id: newId,
+            title: 'محادثة جديدة',
+            lastMessage: '',
+            timestamp: 'الآن',
+            mode: activeMode,
+          };
+          setConversations([newConv]);
+          setActiveConvId(newId);
+          setMessages([]);
+          return newId;
+        }
         return null;
       }
 

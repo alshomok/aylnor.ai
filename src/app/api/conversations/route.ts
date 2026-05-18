@@ -52,18 +52,22 @@ export async function POST(request: NextRequest) {
 
     console.debug('Creating conversation with:', { userId, title, mode });
 
-    // Ensure user exists in users table (upsert)
-    const { error: userError } = await client
-      .from('users')
-      .upsert({
-        id: userId,
-        email: userEmail || 'user@example.com',
-        full_name: userEmail?.split('@')[0] || 'User',
-      });
+    // Ensure user exists in users table (upsert with service role key to bypass RLS)
+    const serverClient = supabaseServer();
+    if (serverClient) {
+      const { error: userError } = await serverClient
+        .from('users')
+        .upsert({
+          id: userId,
+          email: userEmail || 'user@example.com',
+          full_name: userEmail?.split('@')[0] || 'User',
+        });
 
-    if (userError) {
-      console.error('Error upserting user:', userError.message, userError);
-      // Continue anyway - user might already exist or RLS might block
+      if (userError) {
+        console.error('Error upserting user:', userError.message, userError);
+      }
+    } else {
+      console.warn('Service role key not available, skipping user upsert');
     }
 
     const { data: conversation, error } = await client
