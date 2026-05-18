@@ -132,8 +132,8 @@ export default function ChatPageClient() {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to create conversation:', response.status, errorText);
+        const errorData = await response.json();
+        console.error('Failed to create conversation:', response.status, errorData);
         return null;
       }
 

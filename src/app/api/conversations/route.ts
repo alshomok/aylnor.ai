@@ -50,6 +50,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Supabase client not initialized' }, { status: 500 });
     }
 
+    console.debug('Creating conversation with:', { userId, title, mode });
+
     const { data: conversation, error } = await client
       .from('conversations')
       .insert({
@@ -61,10 +63,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error creating conversation:', error);
-      return NextResponse.json({ error: 'Failed to create conversation' }, { status: 500 });
+      console.error('Supabase error creating conversation:', error.message, error);
+      return NextResponse.json(
+        { error: 'Failed to create conversation', details: error.message },
+        { status: 500 }
+      );
     }
 
+    console.debug('Conversation created successfully:', conversation);
     return NextResponse.json({ conversation });
   } catch (error) {
     console.error('Conversations API error:', error);
