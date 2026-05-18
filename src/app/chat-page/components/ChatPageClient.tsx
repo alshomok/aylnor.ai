@@ -126,6 +126,7 @@ export default function ChatPageClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
+          userEmail: user.email,
           title: 'محادثة جديدة',
           mode: activeMode,
         }),

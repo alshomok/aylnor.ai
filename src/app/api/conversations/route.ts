@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, title, mode } = body;
+    const { userId, title, mode, userEmail } = body;
 
     if (!userId || !title || !mode) {
       return NextResponse.json(
@@ -51,6 +51,20 @@ export async function POST(request: NextRequest) {
     }
 
     console.debug('Creating conversation with:', { userId, title, mode });
+
+    // Ensure user exists in users table (upsert)
+    const { error: userError } = await client
+      .from('users')
+      .upsert({
+        id: userId,
+        email: userEmail || 'user@example.com',
+        full_name: userEmail?.split('@')[0] || 'User',
+      });
+
+    if (userError) {
+      console.error('Error upserting user:', userError.message, userError);
+      // Continue anyway - user might already exist or RLS might block
+    }
 
     const { data: conversation, error } = await client
       .from('conversations')
