@@ -173,7 +173,7 @@ export default function ChatMain({
     if (activeConv?.title === 'محادثة جديدة') {
       setConversations((prev) =>
         prev.map((c) =>
-          c.id === activeConvId
+          c.id === conversationId
             ? { ...c, title: content.slice(0, 40), lastMessage: content, mode: activeMode }
             : c
         )

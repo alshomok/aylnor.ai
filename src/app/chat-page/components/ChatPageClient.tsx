@@ -131,21 +131,26 @@ export default function ChatPageClient() {
         }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const conversationId = data.conversation.id;
-        const newConv: Conversation = {
-          id: conversationId,
-          title: data.conversation.title,
-          lastMessage: '',
-          timestamp: 'الآن',
-          mode: data.conversation.mode,
-        };
-        setConversations([newConv]);
-        setActiveConvId(conversationId);
-        setMessages([]);
-        return conversationId;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to create conversation:', response.status, errorText);
+        return null;
       }
+
+      const data = await response.json();
+      const conversationId = data.conversation.id;
+      const newConv: Conversation = {
+        id: conversationId,
+        title: data.conversation.title,
+        lastMessage: '',
+        timestamp: 'الآن',
+        mode: data.conversation.mode,
+      };
+      setConversations([newConv]);
+      setActiveConvId(conversationId);
+      setMessages([]);
+      console.debug('Conversation created successfully:', conversationId);
+      return conversationId;
     } catch (error) {
       console.error('Error creating conversation:', error);
       // Fallback to local state
@@ -160,9 +165,9 @@ export default function ChatPageClient() {
       setConversations([newConv]);
       setActiveConvId(newId);
       setMessages([]);
+      console.debug('Using fallback conversation ID:', newId);
       return newId;
     }
-    return null;
   };
 
   const handleSelectConversation = (conversationId: string) => {
