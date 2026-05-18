@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
         .upsert({
           id: userId,
           email: userEmail || 'user@example.com',
-          full_name: userEmail?.split('@')[0] || 'User',
+          username: userEmail?.split('@')[0] || 'User',
         });
 
       if (userError) {
