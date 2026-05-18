@@ -35,11 +35,20 @@ export default function ChatPageClient() {
   const [showCodePanel, setShowCodePanel] = useState(true);
   const [botName, setBotName] = useState('aylnor');
   const [botPersonality, setBotPersonality] = useState('مساعد مفيد ودقيق وأكاديمي');
-  const [username, setUsername] = useState('أمارا أوسي');
+  const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const themeClass = theme === 'light' ? 'light' : '';
+
+  // Load user data from Supabase Auth
+  useEffect(() => {
+    if (user?.user_metadata?.full_name) {
+      setUsername(user.user_metadata.full_name);
+    } else if (user?.email) {
+      setUsername(user.email.split('@')[0]);
+    }
+  }, [user]);
 
   // Load conversations on mount
   useEffect(() => {
@@ -133,18 +142,7 @@ export default function ChatPageClient() {
         };
         setConversations([newConv]);
         setActiveConvId(newConv.id);
-        setMessages([
-          {
-            id: `msg-${Date.now()}`,
-            role: 'bot',
-            content: `مرحباً! أنا ${botName}. كيف يمكنني مساعدتك اليوم؟`,
-            mode: activeMode,
-            timestamp: new Date().toLocaleTimeString('ar-SA', {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-          },
-        ]);
+        setMessages([]);
       }
     } catch (error) {
       console.error('Error creating conversation:', error);
@@ -159,15 +157,7 @@ export default function ChatPageClient() {
       };
       setConversations([newConv]);
       setActiveConvId(newId);
-      setMessages([
-        {
-          id: `msg-${Date.now()}`,
-          role: 'bot',
-          content: `مرحباً! أنا ${botName}. كيف يمكنني مساعدتك اليوم؟`,
-          mode: activeMode,
-          timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-        },
-      ]);
+      setMessages([]);
     }
   };
 

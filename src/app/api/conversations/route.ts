@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseServer } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: conversation, error } = await supabase
+    const { data: conversation, error } = await supabaseServer
       .from('conversations')
       .insert({
         user_id: userId,

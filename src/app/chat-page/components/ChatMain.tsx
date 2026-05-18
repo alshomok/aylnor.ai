@@ -472,26 +472,6 @@ export default function ChatMain({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Suggested prompts */}
-        {messages.length <= 1 && (
-          <div className="px-3 sm:px-4 pb-3 flex flex-wrap gap-2 justify-end">
-            {[
-              'اشرح مفهوماً خطوة بخطوة',
-              'اكتب دالة Python',
-              'ساعدني في تنظيم مقال',
-              'افحص هذا الكود',
-            ].map((prompt) => (
-              <button
-                key={`suggestion-${prompt}`}
-                onClick={() => setInputValue(prompt)}
-                className="text-xs px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:border-gold/40 hover:text-foreground transition-all"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-        )}
-
         {/* Input area */}
         <div className="px-3 sm:px-4 py-4 border-t border-border bg-card shrink-0">
           <div className="flex items-end gap-2 bg-input border border-border rounded-2xl px-4 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all flex-row-reverse">

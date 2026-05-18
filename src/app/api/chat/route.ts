@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseServer } from '@/lib/supabase';
 import { generateAIResponse, BotMode, ChatMessage } from '@/lib/ai-service';
 
 export async function POST(request: NextRequest) {
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Save user message to Supabase
-    const { error: userMessageError } = await supabase.from('messages').insert({
+    const { error: userMessageError } = await supabaseServer.from('messages').insert({
       conversation_id: conversationId,
       role: 'user',
       content: message,
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const aiResponse = await generateAIResponse(chatHistory, mode as BotMode, botPersonality);
 
     // Save bot response to Supabase
-    const { error: botMessageError } = await supabase.from('messages').insert({
+    const { error: botMessageError } = await supabaseServer.from('messages').insert({
       conversation_id: conversationId,
       role: 'bot',
       content: aiResponse.content,
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update conversation timestamp and last message
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseServer
       .from('conversations')
       .update({
         updated_at: new Date().toISOString(),
