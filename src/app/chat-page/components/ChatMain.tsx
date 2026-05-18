@@ -32,7 +32,7 @@ interface ChatMainProps {
   activeConvId: string;
   conversations: Conversation[];
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
-  onCreateConversation: () => Promise<void>;
+  onCreateConversation: () => Promise<string | null>;
 }
 
 const BOT_MODES: { id: BotMode; label: string; icon: React.ElementType; description: string }[] = [
@@ -145,15 +145,18 @@ export default function ChatMain({
       return;
     }
 
-    // Create conversation if none exists
-    if (!activeConvId) {
-      await onCreateConversation();
-      // Wait a moment for conversation to be created
-      setTimeout(() => sendMessage(), 500);
-      return;
+    // Create conversation if none exists and get the conversation ID
+    let conversationId: string | null = activeConvId;
+    if (!conversationId) {
+      console.debug('Creating new conversation before sending message');
+      conversationId = await onCreateConversation();
+      if (!conversationId) {
+        console.error('Failed to create conversation');
+        return;
+      }
     }
 
-    console.debug('Sending message', { conversationId: activeConvId, mode: activeMode });
+    console.debug('Sending message', { conversationId, mode: activeMode });
 
     const userMsg: Message = {
       id: `msg-${Date.now()}-user`,
@@ -185,7 +188,7 @@ export default function ChatMain({
         },
         body: JSON.stringify({
           message: content,
-          conversationId: activeConvId,
+          conversationId: conversationId,
           mode: activeMode,
           botPersonality: 'مساعد مفيد ودقيق وأكاديمي',
           userId: user.id,

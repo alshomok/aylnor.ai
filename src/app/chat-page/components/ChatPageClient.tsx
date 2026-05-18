@@ -114,10 +114,10 @@ export default function ChatPageClient() {
     }
   };
 
-  const createNewConversation = async () => {
+  const createNewConversation = async (): Promise<string | null> => {
     if (!user?.id) {
       console.warn('No user ID available');
-      return;
+      return null;
     }
 
     try {
@@ -133,16 +133,18 @@ export default function ChatPageClient() {
 
       if (response.ok) {
         const data = await response.json();
+        const conversationId = data.conversation.id;
         const newConv: Conversation = {
-          id: data.conversation.id,
+          id: conversationId,
           title: data.conversation.title,
           lastMessage: '',
           timestamp: 'الآن',
           mode: data.conversation.mode,
         };
         setConversations([newConv]);
-        setActiveConvId(newConv.id);
+        setActiveConvId(conversationId);
         setMessages([]);
+        return conversationId;
       }
     } catch (error) {
       console.error('Error creating conversation:', error);
@@ -158,7 +160,9 @@ export default function ChatPageClient() {
       setConversations([newConv]);
       setActiveConvId(newId);
       setMessages([]);
+      return newId;
     }
+    return null;
   };
 
   const handleSelectConversation = (conversationId: string) => {
