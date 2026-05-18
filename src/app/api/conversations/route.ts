@@ -10,6 +10,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing userId parameter' }, { status: 400 });
     }
 
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase client not initialized' }, { status: 500 });
+    }
+
     const { data: conversations, error } = await supabase
       .from('conversations')
       .select('*')
@@ -40,7 +44,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: conversation, error } = await supabaseServer
+    const server = supabaseServer();
+    if (!server) {
+      return NextResponse.json({ error: 'Supabase server client not initialized' }, { status: 500 });
+    }
+
+    const { data: conversation, error } = await server
       .from('conversations')
       .insert({
         user_id: userId,

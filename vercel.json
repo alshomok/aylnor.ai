@@ -1,13 +1,5 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "framework": "nextjs",
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "NEXT_PUBLIC_SUPABASE_URL",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-    "GEMINI_API_KEY_1": "GEMINI_API_KEY_1",
-    "GEMINI_API_KEY_2": "GEMINI_API_KEY_2",
-    "GROK_API_KEY_1": "GROK_API_KEY_1",
-    "GROK_API_KEY_2": "GROK_API_KEY_2"
-  }
+  "framework": "nextjs"
 }

@@ -14,6 +14,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase client not initialized' }, { status: 500 });
+    }
+
+    const server = supabaseServer();
+    if (!server) {
+      return NextResponse.json({ error: 'Supabase server client not initialized' }, { status: 500 });
+    }
+
     // Get conversation history from Supabase
     const { data: messages, error: messagesError } = await supabase
       .from('messages')
@@ -39,7 +48,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Save user message to Supabase
-    const { error: userMessageError } = await supabaseServer.from('messages').insert({
+    const { error: userMessageError } = await server.from('messages').insert({
       conversation_id: conversationId,
       role: 'user',
       content: message,
@@ -55,7 +64,7 @@ export async function POST(request: NextRequest) {
     const aiResponse = await generateAIResponse(chatHistory, mode as BotMode, botPersonality);
 
     // Save bot response to Supabase
-    const { error: botMessageError } = await supabaseServer.from('messages').insert({
+    const { error: botMessageError } = await server.from('messages').insert({
       conversation_id: conversationId,
       role: 'bot',
       content: aiResponse.content,
@@ -68,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update conversation timestamp and last message
-    const { error: updateError } = await supabaseServer
+    const { error: updateError } = await server
       .from('conversations')
       .update({
         updated_at: new Date().toISOString(),

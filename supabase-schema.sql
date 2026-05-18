@@ -86,3 +86,22 @@ CREATE POLICY "Users can create messages in their conversations" ON messages FOR
     AND conversations.user_id = auth.uid()
   )
 );
+
+-- Fix: Drop existing policies and recreate with proper checks
+DROP POLICY IF EXISTS "Users can create their conversations" ON conversations;
+DROP POLICY IF EXISTS "Users can create messages in their conversations" ON messages;
+
+-- Recreate INSERT policies with proper checks
+CREATE POLICY "Users can create their conversations" ON conversations
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can create messages in their conversations" ON messages
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM conversations
+      WHERE conversations.id = messages.conversation_id
+      AND conversations.user_id = auth.uid()
+    )
+  );

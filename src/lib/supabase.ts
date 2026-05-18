@@ -1,22 +1,46 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 // Client-side Supabase client (uses anon key)
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Safely initialize - return null if env vars are missing
+export const supabase: SupabaseClient | null = (supabaseUrl && supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
+
+// Log warning if env vars are missing
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
+}
 
 // Server-side Supabase client (uses service role key to bypass RLS)
-export const supabaseServer = createClient(
-  supabaseUrl,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
+let supabaseServerInstance: SupabaseClient | null = null;
+
+export const supabaseServer = (): SupabaseClient | null => {
+  if (supabaseServerInstance) {
+    return supabaseServerInstance;
   }
-);
+
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error('Missing Supabase server environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+    return null;
+  }
+
+  supabaseServerInstance = createClient(
+    supabaseUrl,
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  );
+
+  return supabaseServerInstance;
+};
 
 export type Database = {
   public: {
