@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { supabase, supabaseServer } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
@@ -44,33 +45,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use anon key client (RLS policy allows users to create their own conversations)
-    const client = supabase || supabaseServer();
-    if (!client) {
-      return NextResponse.json({ error: 'Supabase client not initialized' }, { status: 500 });
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json(
+        { error: 'Missing Supabase environment variables' },
+        { status: 500 }
+      );
     }
+
+    // Create admin client with service role key to bypass RLS
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
 
     console.debug('Creating conversation with:', { userId, title, mode });
 
     // Ensure user exists in users table (upsert with service role key to bypass RLS)
-    const serverClient = supabaseServer();
-    if (serverClient) {
-      const { error: userError } = await serverClient
-        .from('users')
-        .upsert({
-          id: userId,
-          email: userEmail || 'user@example.com',
-          username: userEmail?.split('@')[0] || 'User',
-        });
+    const { error: userError } = await supabaseAdmin
+      .from('users')
+      .upsert({
+        id: userId,
+        email: userEmail || 'user@example.com',
+        username: userEmail?.split('@')[0] || 'User',
+      });
 
-      if (userError) {
-        console.error('Error upserting user:', userError.message, userError);
-      }
-    } else {
-      console.warn('Service role key not available, skipping user upsert');
+    if (userError) {
+      console.error('Error upserting user:', userError.message, userError);
     }
 
-    const { data: conversation, error } = await client
+    const { data: conversation, error } = await supabaseAdmin
       .from('conversations')
       .insert({
         user_id: userId,
