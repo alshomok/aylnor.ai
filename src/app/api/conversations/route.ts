@@ -44,12 +44,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const server = supabaseServer();
-    if (!server) {
-      return NextResponse.json({ error: 'Supabase server client not initialized' }, { status: 500 });
+    // Use anon key client (RLS policy allows users to create their own conversations)
+    const client = supabase || supabaseServer();
+    if (!client) {
+      return NextResponse.json({ error: 'Supabase client not initialized' }, { status: 500 });
     }
 
-    const { data: conversation, error } = await server
+    const { data: conversation, error } = await client
       .from('conversations')
       .insert({
         user_id: userId,
