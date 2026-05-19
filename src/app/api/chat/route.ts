@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseServer } from '@/lib/supabase';
-import { generateAIResponseStream, BotMode, ChatMessage } from '@/lib/ai-service';
+import { generateAIResponse, BotMode, ChatMessage } from '@/lib/ai-service';
 
 const DAILY_TOKEN_LIMITS: Record<BotMode, number> = {
   quick: Infinity,
@@ -115,15 +115,14 @@ export async function POST(request: NextRequest) {
         .order('created_at', { ascending: true });
 
       if (messagesError) {
-        console.warn('Could not fetch history, continuing with empty history:', messagesError.message);
-        // Continue with empty history instead of failing
+        console.error('Error fetching messages:', messagesError);
       } else {
         messages = messagesData || [];
       }
     }
 
-    // Convert to ChatMessage format
-    const chatHistory: ChatMessage[] = (messages || []).map((msg: any) => ({
+    // Build chat history
+    const chatHistory: ChatMessage[] = messages.map((msg: any) => ({
       role: msg.role === 'bot' ? 'assistant' : 'user',
       content: msg.content,
     }));
@@ -186,25 +185,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate AI response with streaming
-    const result = await generateAIResponseStream(chatHistory, mode as BotMode, botPersonality);
-
-    // Convert stream to response
-    const response = result.toTextStreamResponse();
+    // Generate AI response
+    const aiResponse = await generateAIResponse(chatHistory, mode as BotMode, botPersonality);
 
     // Track token usage (estimate based on message length)
-    // Note: For accurate tracking, this should be done after the response completes
-    // For now, we estimate based on input + expected output
     if (userId && mode !== 'quick') {
-      const estimatedTokens = message.length / 4 + 500; // Rough estimate
+      const estimatedTokens = message.length / 4 + aiResponse.content.length / 4;
       await trackTokenUsage(userId, mode as BotMode, Math.floor(estimatedTokens));
     }
 
     // Save bot response to Supabase (skip if local conversation)
-    // Note: For streaming, we save the full response after it completes
-    // This is handled by the client-side code that consumes the stream
     if (!isLocalConversation) {
-      // Update conversation timestamp
+      const { error: botMessageError } = await server.from('messages').insert({
+        conversation_id: conversationId,
+        role: 'bot',
+        content: aiResponse.content,
+        mode: aiResponse.mode,
+        code_block: aiResponse.codeBlock,
+      });
+
+      if (botMessageError) {
+        console.error('Error saving bot message:', botMessageError);
+      }
+
+      // Update conversation timestamp and last message
       const { error: updateError } = await server
         .from('conversations')
         .update({
@@ -217,7 +221,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return response;
+    return NextResponse.json({
+      content: aiResponse.content,
+      mode: aiResponse.mode,
+      codeBlock: aiResponse.codeBlock,
+      provider: aiResponse.provider,
+      model: aiResponse.model,
+    });
   } catch (error) {
     console.error('Chat API error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

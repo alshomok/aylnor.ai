@@ -203,7 +203,26 @@ export default function ChatMain({
         throw new Error('Failed to get response');
       }
 
-      const data = await response.json();
+      // Handle empty response body
+      const responseText = await response.text();
+      if (!responseText || responseText.trim() === '') {
+        console.error('Empty response body');
+        throw new Error('Empty response from server');
+      }
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError, 'Response text:', responseText);
+        throw new Error('Invalid JSON response from server');
+      }
+
+      // Validate response data
+      if (!data || !data.content) {
+        console.error('Invalid response data:', data);
+        throw new Error('Invalid response data from server');
+      }
 
       const botMsg: Message = {
         id: `msg-${Date.now()}-bot`,
