@@ -37,7 +37,6 @@ export default function ChatPageClient() {
   const [botPersonality, setBotPersonality] = useState('مساعد مفيد ودقيق وأكاديمي');
   const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [hasLoaded, setHasLoaded] = useState(false);
 
   const themeClass = theme === 'light' ? 'light' : '';
 
@@ -50,13 +49,18 @@ export default function ChatPageClient() {
     }
   }, [user]);
 
-  // Load conversations on mount
+  // Load conversations whenever user changes (login/logout)
   useEffect(() => {
-    if (!hasLoaded && user?.id) {
+    if (user?.id) {
       loadConversations();
-      setHasLoaded(true);
+    } else {
+      // Clear local state when user logs out
+      setConversations([]);
+      setMessages([]);
+      setActiveConvId('');
+      setIsLoading(false);
     }
-  }, [user, hasLoaded]);
+  }, [user?.id]);
 
   const loadConversations = async () => {
     if (!user?.id) {

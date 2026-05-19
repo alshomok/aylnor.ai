@@ -1,9 +1,9 @@
 import { google } from '@ai-sdk/google';
 import { groq } from '@ai-sdk/groq';
-import { generateText } from 'ai';
-import { aiKeyRotationService, AIKeyConfig } from './ai-key-rotation';
+import { generateText, streamText } from 'ai';
+import { aiKeyRotationService, AIKeyConfig, BotMode } from './ai-key-rotation';
 
-export type BotMode = 'quick' | 'thoughtful' | 'programming';
+export type { BotMode };
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -41,7 +41,7 @@ export async function generateAIResponse(
   mode: BotMode,
   botPersonality?: string
 ): Promise<AIResponse> {
-  const keyConfig = aiKeyRotationService.getNextAvailableKey();
+  const keyConfig = aiKeyRotationService.getNextAvailableKey(mode);
 
   if (!keyConfig) {
     throw new Error(
@@ -74,11 +74,14 @@ export async function generateAIResponse(
       process.env.GROQ_API_KEY = keyConfig.apiKey;
     }
 
+    // Get mode-specific settings
+    const temperature = aiKeyRotationService.getTemperature(mode);
+
     // Generate response
     const response = await generateText({
       model,
       messages: apiMessages,
-      temperature: mode === 'programming' ? 0.3 : mode === 'quick' ? 0.5 : 0.7,
+      temperature,
     });
 
     // Report success
@@ -96,11 +99,73 @@ export async function generateAIResponse(
     };
   } catch (error) {
     // Report failure and rotate to next key
-    aiKeyRotationService.reportKeyFailure(keyConfig.id, error as Error);
+    aiKeyRotationService.reportKeyFailure(keyConfig.id, mode, error as Error);
 
     // Retry with next available key
     console.log(`Key ${keyConfig.id} failed, retrying with next available key...`);
     return generateAIResponse(messages, mode, botPersonality);
+  }
+}
+
+export async function generateAIResponseStream(
+  messages: ChatMessage[],
+  mode: BotMode,
+  botPersonality?: string
+) {
+  const keyConfig = aiKeyRotationService.getNextAvailableKey(mode);
+
+  if (!keyConfig) {
+    throw new Error(
+      'No AI keys are currently available. All keys may be in cooldown or not configured.'
+    );
+  }
+
+  try {
+    // Prepare messages with system prompt
+    const systemPrompt = botPersonality
+      ? `${MODE_SYSTEM_PROMPTS[mode]}\n\nAdditional personality: ${botPersonality}`
+      : MODE_SYSTEM_PROMPTS[mode];
+
+    const apiMessages = [{ role: 'system' as const, content: systemPrompt }, ...messages];
+
+    // Select AI provider based on key config
+    let model;
+    if (keyConfig.provider === 'gemini') {
+      model = google(keyConfig.model);
+    } else if (keyConfig.provider === 'groq') {
+      model = groq(keyConfig.model);
+    } else {
+      throw new Error(`Unsupported AI provider: ${keyConfig.provider}`);
+    }
+
+    // Set API key for the provider
+    if (keyConfig.provider === 'gemini') {
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY = keyConfig.apiKey;
+    } else if (keyConfig.provider === 'groq') {
+      process.env.GROQ_API_KEY = keyConfig.apiKey;
+    }
+
+    // Get mode-specific settings
+    const temperature = aiKeyRotationService.getTemperature(mode);
+
+    // Generate streaming response
+    const result = streamText({
+      model,
+      messages: apiMessages,
+      temperature,
+    });
+
+    // Report success
+    aiKeyRotationService.reportKeySuccess(keyConfig.id);
+
+    return result;
+  } catch (error) {
+    // Report failure and rotate to next key
+    aiKeyRotationService.reportKeyFailure(keyConfig.id, mode, error as Error);
+
+    // Retry with next available key
+    console.log(`Key ${keyConfig.id} failed, retrying with next available key...`);
+    return generateAIResponseStream(messages, mode, botPersonality);
   }
 }
 

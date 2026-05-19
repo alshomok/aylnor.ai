@@ -141,6 +141,61 @@ export type Database = {
           updated_at?: string;
         };
       };
+      knowledge_base: {
+        Row: {
+          id: string;
+          filename: string;
+          file_type: string;
+          file_url: string;
+          extracted_text: string;
+          source: 'upload' | 'google_drive';
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          filename: string;
+          file_type: string;
+          file_url: string;
+          extracted_text: string;
+          source: 'upload' | 'google_drive';
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          filename?: string;
+          file_type?: string;
+          file_url?: string;
+          extracted_text?: string;
+          source?: 'upload' | 'google_drive';
+          created_at?: string;
+        };
+      };
+      token_usage: {
+        Row: {
+          id: string;
+          user_id: string;
+          mode: 'quick' | 'thoughtful' | 'programming';
+          tokens_used: number;
+          date: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          mode: 'quick' | 'thoughtful' | 'programming';
+          tokens_used: number;
+          date: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          mode?: 'quick' | 'thoughtful' | 'programming';
+          tokens_used?: number;
+          date?: string;
+          created_at?: string;
+        };
+      };
     };
   };
 };

@@ -1,5 +1,6 @@
 export type AIProvider = 'gemini' | 'groq';
-export type AIModel = 'gemini-flash-1' | 'gemini-flash-2' | 'groq-1' | 'groq-2';
+export type AIModel = 'model-1' | 'model-2' | 'model-3' | 'model-4';
+export type BotMode = 'quick' | 'thoughtful' | 'programming';
 
 export interface AIKeyConfig {
   id: AIModel;
@@ -11,65 +12,71 @@ export interface AIKeyConfig {
   lastFailureTime?: Date;
 }
 
-const KEY_ROTATION_SEQUENCE: AIModel[] = ['gemini-flash-1', 'gemini-flash-2', 'groq-1', 'groq-2'];
+const MODEL_CONFIGS: Record<AIModel, { provider: AIProvider; model: string; envKey: string }> = {
+  'model-1': { provider: 'gemini', model: 'gemini-1.5-flash', envKey: 'GEMINI_API_KEY_1' },
+  'model-2': { provider: 'gemini', model: 'gemini-2.0-flash', envKey: 'GEMINI_API_KEY_2' },
+  'model-3': { provider: 'groq', model: 'llama-3.1-8b-instant', envKey: 'GROK_API_KEY_1' },
+  'model-4': { provider: 'groq', model: 'gemma2-9b-it', envKey: 'GROK_API_KEY_2' },
+};
+
+const MODE_ROTATION_PRIORITIES: Record<BotMode, AIModel[]> = {
+  quick: ['model-3', 'model-4', 'model-2', 'model-1'],
+  thoughtful: ['model-2', 'model-1', 'model-3', 'model-4'],
+  programming: ['model-2', 'model-1', 'model-3', 'model-4'],
+};
+
+const MODE_TOKEN_LIMITS: Record<BotMode, number | null> = {
+  quick: null,
+  thoughtful: 1200,
+  programming: 1500,
+};
+
+const MODE_TEMPERATURES: Record<BotMode, number> = {
+  quick: 0.7,
+  thoughtful: 0.5,
+  programming: 0.3,
+};
 
 class AIKeyRotationService {
   private keys: Map<AIModel, AIKeyConfig> = new Map();
-  private currentIndex: number = 0;
+  private modeIndexes: Map<BotMode, number> = new Map();
   private maxFailures: number = 3;
   private cooldownPeriod: number = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
     this.initializeKeys();
+    this.initializeModeIndexes();
   }
 
   private initializeKeys(): void {
-    const keyConfigs: Omit<AIKeyConfig, 'isActive' | 'failureCount'>[] = [
-      {
-        id: 'gemini-flash-1',
-        provider: 'gemini',
-        apiKey: process.env.GEMINI_API_KEY_1 || '',
-        model: 'gemini-2.0-flash-exp',
-      },
-      {
-        id: 'gemini-flash-2',
-        provider: 'gemini',
-        apiKey: process.env.GEMINI_API_KEY_2 || '',
-        model: 'gemini-2.0-flash-exp',
-      },
-      {
-        id: 'groq-1',
-        provider: 'groq',
-        apiKey: process.env.GROK_API_KEY_1 || '',
-        model: 'llama-3.3-70b-versatile',
-      },
-      {
-        id: 'groq-2',
-        provider: 'groq',
-        apiKey: process.env.GROK_API_KEY_2 || '',
-        model: 'llama-3.3-70b-versatile',
-      },
-    ];
-
-    keyConfigs.forEach((config) => {
-      this.keys.set(config.id, {
-        ...config,
+    Object.entries(MODEL_CONFIGS).forEach(([modelId, config]) => {
+      this.keys.set(modelId as AIModel, {
+        id: modelId as AIModel,
+        provider: config.provider,
+        apiKey: process.env[config.envKey] || '',
+        model: config.model,
         isActive: true,
         failureCount: 0,
       });
     });
   }
 
-  public getNextAvailableKey(): AIKeyConfig | null {
-    const startTime = Date.now();
-    const maxAttempts = KEY_ROTATION_SEQUENCE.length;
+  private initializeModeIndexes(): void {
+    this.modeIndexes.set('quick', 0);
+    this.modeIndexes.set('thoughtful', 0);
+    this.modeIndexes.set('programming', 0);
+  }
+
+  public getNextAvailableKey(mode: BotMode): AIKeyConfig | null {
+    const rotationSequence = MODE_ROTATION_PRIORITIES[mode];
+    const currentIndex = this.modeIndexes.get(mode) || 0;
+    const maxAttempts = rotationSequence.length;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const keyId = KEY_ROTATION_SEQUENCE[this.currentIndex];
+      const keyId = rotationSequence[(currentIndex + attempt) % maxAttempts];
       const key = this.keys.get(keyId);
 
       if (!key) {
-        this.rotateToNextKey();
         continue;
       }
 
@@ -77,20 +84,17 @@ class AIKeyRotationService {
       if (key.lastFailureTime) {
         const timeSinceFailure = Date.now() - key.lastFailureTime.getTime();
         if (timeSinceFailure < this.cooldownPeriod) {
-          this.rotateToNextKey();
           continue;
         }
       }
 
       // Check if key has exceeded max failures
       if (key.failureCount >= this.maxFailures) {
-        this.rotateToNextKey();
         continue;
       }
 
       // Check if API key is configured
       if (!key.apiKey) {
-        this.rotateToNextKey();
         continue;
       }
 
@@ -101,7 +105,7 @@ class AIKeyRotationService {
     return null;
   }
 
-  public reportKeyFailure(keyId: AIModel, error?: Error): void {
+  public reportKeyFailure(keyId: AIModel, mode: BotMode, error?: Error): void {
     const key = this.keys.get(keyId);
     if (!key) return;
 
@@ -114,8 +118,8 @@ class AIKeyRotationService {
       console.error(`AI key ${keyId} has exceeded max failures and is temporarily disabled`);
     }
 
-    // Rotate to next key
-    this.rotateToNextKey();
+    // Rotate to next key for this mode
+    this.rotateToNextKey(mode);
   }
 
   public reportKeySuccess(keyId: AIModel): void {
@@ -127,8 +131,10 @@ class AIKeyRotationService {
     key.isActive = true;
   }
 
-  private rotateToNextKey(): void {
-    this.currentIndex = (this.currentIndex + 1) % KEY_ROTATION_SEQUENCE.length;
+  private rotateToNextKey(mode: BotMode): void {
+    const currentIndex = this.modeIndexes.get(mode) || 0;
+    const rotationSequence = MODE_ROTATION_PRIORITIES[mode];
+    this.modeIndexes.set(mode, (currentIndex + 1) % rotationSequence.length);
   }
 
   public resetKey(keyId: AIModel): void {
@@ -160,8 +166,16 @@ class AIKeyRotationService {
     return status;
   }
 
-  public getCurrentKeyIndex(): number {
-    return this.currentIndex;
+  public getCurrentKeyIndex(mode: BotMode): number {
+    return this.modeIndexes.get(mode) || 0;
+  }
+
+  public getTokenLimit(mode: BotMode): number | null {
+    return MODE_TOKEN_LIMITS[mode];
+  }
+
+  public getTemperature(mode: BotMode): number {
+    return MODE_TEMPERATURES[mode];
   }
 }
 

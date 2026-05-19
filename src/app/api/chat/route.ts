@@ -1,6 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseServer } from '@/lib/supabase';
-import { generateAIResponse, BotMode, ChatMessage } from '@/lib/ai-service';
+import { generateAIResponseStream, BotMode, ChatMessage } from '@/lib/ai-service';
+
+const DAILY_TOKEN_LIMITS: Record<BotMode, number> = {
+  quick: Infinity,
+  thoughtful: 400000,
+  programming: 400000,
+};
+
+async function checkTokenBudget(userId: string, mode: BotMode): Promise<boolean> {
+  const server = supabaseServer();
+  if (!server) return true;
+
+  const limit = DAILY_TOKEN_LIMITS[mode];
+  if (limit === Infinity) return true;
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data, error } = await server
+    .from('token_usage')
+    .select('tokens_used')
+    .eq('user_id', userId)
+    .eq('mode', mode)
+    .eq('date', today);
+
+  if (error) {
+    console.error('Error checking token budget:', error);
+    return true; // Allow on error to not block users
+  }
+
+  const totalUsed = data?.reduce((sum, record) => sum + record.tokens_used, 0) || 0;
+  return totalUsed < limit;
+}
+
+async function trackTokenUsage(userId: string, mode: BotMode, tokensUsed: number): Promise<void> {
+  const server = supabaseServer();
+  if (!server) return;
+
+  const limit = DAILY_TOKEN_LIMITS[mode];
+  if (limit === Infinity) return; // Don't track unlimited mode
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Check if record exists for today
+  const { data: existingRecord } = await server
+    .from('token_usage')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('mode', mode)
+    .eq('date', today)
+    .single();
+
+  if (existingRecord) {
+    // Update existing record
+    await server
+      .from('token_usage')
+      .update({ tokens_used: existingRecord.tokens_used + tokensUsed })
+      .eq('id', existingRecord.id);
+  } else {
+    // Create new record
+    await server
+      .from('token_usage')
+      .insert({
+        user_id: userId,
+        mode,
+        tokens_used: tokensUsed,
+        date: today,
+      });
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,6 +89,17 @@ export async function POST(request: NextRequest) {
     const server = supabaseServer();
     if (!server) {
       return NextResponse.json({ error: 'Supabase server client not initialized' }, { status: 500 });
+    }
+
+    // Check token budget for non-quick modes
+    if (userId && mode !== 'quick') {
+      const hasBudget = await checkTokenBudget(userId, mode as BotMode);
+      if (!hasBudget) {
+        return NextResponse.json(
+          { error: 'Daily token limit exceeded for this mode. Please try again tomorrow or use quick mode.' },
+          { status: 429 }
+        );
+      }
     }
 
     // Check if this is a local conversation (fallback state)
@@ -49,10 +128,47 @@ export async function POST(request: NextRequest) {
       content: msg.content,
     }));
 
-    // Add current user message
+    // Search knowledge base for relevant content
+    let knowledgeContext = '';
+    try {
+      const { data: knowledgeFiles, error: knowledgeError } = await supabase
+        .from('knowledge_base')
+        .select('filename, extracted_text')
+        .order('created_at', { ascending: false });
+
+      if (!knowledgeError && knowledgeFiles) {
+        // Simple keyword search: check if any words from user message appear in filename or extracted_text
+        const userWords = message.toLowerCase().split(/\s+/).filter((word: string) => word.length > 3);
+        const relevantFiles = knowledgeFiles.filter((file: any) => {
+          const filenameLower = file.filename.toLowerCase();
+          const textLower = file.extracted_text.toLowerCase();
+          return userWords.some((word: string) => 
+            filenameLower.includes(word) || textLower.includes(word)
+          );
+        });
+
+        if (relevantFiles.length > 0) {
+          knowledgeContext = '\n\n--- معلومات من قاعدة المعرفة ---\n';
+          relevantFiles.forEach((file: any, index: number) => {
+            knowledgeContext += `\nالملف: ${file.filename}\n`;
+            knowledgeContext += `المحتوى: ${file.extracted_text.substring(0, 2000)}...\n`;
+          });
+          knowledgeContext += '--- نهاية معلومات قاعدة المعرفة ---\n';
+        }
+      }
+    } catch (error) {
+      console.warn('Knowledge base search error:', error);
+      // Continue without knowledge base context
+    }
+
+    // Add current user message with knowledge context if available
+    const userMessageWithContext = knowledgeContext 
+      ? `${message}${knowledgeContext}`
+      : message;
+
     chatHistory.push({
       role: 'user',
-      content: message,
+      content: userMessageWithContext,
     });
 
     // Save user message to Supabase (skip if local conversation)
@@ -70,24 +186,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate AI response
-    const aiResponse = await generateAIResponse(chatHistory, mode as BotMode, botPersonality);
+    // Generate AI response with streaming
+    const result = await generateAIResponseStream(chatHistory, mode as BotMode, botPersonality);
+
+    // Convert stream to response
+    const response = result.toTextStreamResponse();
+
+    // Track token usage (estimate based on message length)
+    // Note: For accurate tracking, this should be done after the response completes
+    // For now, we estimate based on input + expected output
+    if (userId && mode !== 'quick') {
+      const estimatedTokens = message.length / 4 + 500; // Rough estimate
+      await trackTokenUsage(userId, mode as BotMode, Math.floor(estimatedTokens));
+    }
 
     // Save bot response to Supabase (skip if local conversation)
+    // Note: For streaming, we save the full response after it completes
+    // This is handled by the client-side code that consumes the stream
     if (!isLocalConversation) {
-      const { error: botMessageError } = await server.from('messages').insert({
-        conversation_id: conversationId,
-        role: 'bot',
-        content: aiResponse.content,
-        mode: aiResponse.mode,
-        code_block: aiResponse.codeBlock,
-      });
-
-      if (botMessageError) {
-        console.error('Error saving bot message:', botMessageError);
-      }
-
-      // Update conversation timestamp and last message
+      // Update conversation timestamp
       const { error: updateError } = await server
         .from('conversations')
         .update({
@@ -100,13 +217,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      content: aiResponse.content,
-      mode: aiResponse.mode,
-      codeBlock: aiResponse.codeBlock,
-      provider: aiResponse.provider,
-      model: aiResponse.model,
-    });
+    return response;
   } catch (error) {
     console.error('Chat API error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
