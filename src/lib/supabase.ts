@@ -6,7 +6,13 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 // Client-side Supabase client (uses anon key)
 // Safely initialize - return null if env vars are missing
 export const supabase: SupabaseClient | null = (supabaseUrl && supabaseAnonKey)
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        storageKey: 'aylnor-auth-token',
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      },
+    })
   : null;
 
 // Log warning if env vars are missing

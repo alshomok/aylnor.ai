@@ -29,6 +29,20 @@ export default function ChatPageClient() {
   const [theme, setTheme] = useState<Theme>('dark');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeMode, setActiveMode] = useState<BotMode>('thoughtful');
+
+  // Load activeMode from localStorage on mount
+  useEffect(() => {
+    const savedMode = localStorage.getItem('aylnor_active_mode') as BotMode;
+    if (savedMode && ['quick', 'thoughtful', 'programming'].includes(savedMode)) {
+      setActiveMode(savedMode);
+    }
+  }, []);
+
+  // Persist activeMode to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('aylnor_active_mode', activeMode);
+  }, [activeMode]);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string>('');
@@ -144,7 +158,7 @@ export default function ChatPageClient() {
           timestamp: 'الآن',
           mode: activeMode,
         };
-        setConversations([newConv]);
+        setConversations((prev) => [newConv, ...prev]);
         setActiveConvId(newId);
         setMessages([]);
         return newId;
@@ -159,7 +173,7 @@ export default function ChatPageClient() {
         timestamp: 'الآن',
         mode: data.conversation.mode,
       };
-      setConversations([newConv]);
+      setConversations((prev) => [newConv, ...prev]);
       setActiveConvId(conversationId);
       setMessages([]);
       console.debug('Conversation created successfully:', conversationId);
@@ -175,7 +189,7 @@ export default function ChatPageClient() {
         timestamp: 'الآن',
         mode: activeMode,
       };
-      setConversations([newConv]);
+      setConversations((prev) => [newConv, ...prev]);
       setActiveConvId(newId);
       setMessages([]);
       console.debug('Using fallback conversation ID:', newId);
