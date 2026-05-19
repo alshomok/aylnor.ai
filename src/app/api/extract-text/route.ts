@@ -5,8 +5,12 @@ import mammoth from 'mammoth';
 import xlsx from 'xlsx';
 
 export async function POST(request: NextRequest) {
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Request timeout')), 30000)
+  );
+
   try {
-    const formData = await request.formData();
+    const formData = await Promise.race([request.formData(), timeoutPromise]) as FormData;
     const file = formData.get('file') as File;
     const fileType = formData.get('fileType') as string;
 
@@ -19,12 +23,12 @@ export async function POST(request: NextRequest) {
 
     switch (fileType) {
       case 'pdf':
-        const data = await pdf(buffer);
+        const data = await Promise.race([pdf(buffer), timeoutPromise]);
         extractedText = data.text;
         break;
 
       case 'docx':
-        const docxResult = await mammoth.extractRawText({ buffer });
+        const docxResult = await Promise.race([mammoth.extractRawText({ buffer }), timeoutPromise]) as { value: string };
         extractedText = docxResult.value;
         break;
 
@@ -50,6 +54,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ extractedText });
   } catch (error) {
     console.error('Text extraction error:', error);
+    if (error instanceof Error && error.message === 'Request timeout') {
+      return NextResponse.json({ error: 'Extraction timeout - file too large' }, { status: 408 });
+    }
     return NextResponse.json({ error: 'Failed to extract text' }, { status: 500 });
   }
 }

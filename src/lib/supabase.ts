@@ -148,7 +148,8 @@ export type Database = {
           file_type: string;
           file_url: string;
           extracted_text: string;
-          source: 'upload' | 'google_drive';
+          source: string;
+          description: string;
           created_at: string;
         };
         Insert: {

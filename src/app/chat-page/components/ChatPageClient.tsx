@@ -14,6 +14,13 @@ export interface Message {
   mode?: BotMode;
   timestamp: string;
   codeBlock?: { language: string; code: string };
+  fileCard?: {
+    id: string;
+    filename: string;
+    file_type: string;
+    file_url: string;
+    description: string;
+  };
 }
 
 export interface Conversation {

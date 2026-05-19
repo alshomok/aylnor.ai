@@ -19,6 +19,7 @@ create table if not exists knowledge_base (
   file_url text not null,
   extracted_text text not null,
   source text not null check (source in ('upload', 'google_drive')),
+  description text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

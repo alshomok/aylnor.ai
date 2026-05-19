@@ -127,7 +127,49 @@ export async function POST(request: NextRequest) {
       content: msg.content,
     }));
 
-    // Search knowledge base for relevant content
+    // Search knowledge base for relevant files
+    let foundFile: any = null;
+    try {
+      const { data: knowledgeFiles, error: knowledgeError } = await supabase
+        .from('knowledge_base')
+        .select('id, filename, file_type, file_url, description, extracted_text')
+        .order('created_at', { ascending: false });
+
+      if (!knowledgeError && knowledgeFiles) {
+        // Search in filename, description, and extracted_text
+        const userWords = message.toLowerCase().split(/\s+/).filter((word: string) => word.length > 2);
+        const relevantFiles = knowledgeFiles.filter((file: any) => {
+          const filenameLower = file.filename.toLowerCase();
+          const descriptionLower = (file.description || '').toLowerCase();
+          const textLower = file.extracted_text.toLowerCase();
+          return userWords.some((word: string) => 
+            filenameLower.includes(word) || descriptionLower.includes(word) || textLower.includes(word)
+          );
+        });
+
+        if (relevantFiles.length > 0) {
+          foundFile = relevantFiles[0];
+        }
+      }
+    } catch (error) {
+      console.warn('Knowledge base search error:', error);
+    }
+
+    // If a file is found, return file card data instead of AI response
+    if (foundFile) {
+      return NextResponse.json({
+        content: '',
+        fileCard: {
+          id: foundFile.id,
+          filename: foundFile.filename,
+          file_type: foundFile.file_type,
+          file_url: foundFile.file_url,
+          description: foundFile.description,
+        },
+      });
+    }
+
+    // Search knowledge base for relevant content (context only)
     let knowledgeContext = '';
     try {
       const { data: knowledgeFiles, error: knowledgeError } = await supabase
@@ -136,7 +178,6 @@ export async function POST(request: NextRequest) {
         .order('created_at', { ascending: false });
 
       if (!knowledgeError && knowledgeFiles) {
-        // Simple keyword search: check if any words from user message appear in filename or extracted_text
         const userWords = message.toLowerCase().split(/\s+/).filter((word: string) => word.length > 3);
         const relevantFiles = knowledgeFiles.filter((file: any) => {
           const filenameLower = file.filename.toLowerCase();
@@ -157,7 +198,6 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       console.warn('Knowledge base search error:', error);
-      // Continue without knowledge base context
     }
 
     // Add current user message with knowledge context if available

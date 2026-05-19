@@ -9,6 +9,7 @@ interface KnowledgeFile {
   file_url: string;
   extracted_text: string;
   source: 'upload' | 'google_drive';
+  description: string;
   created_at: string;
 }
 
@@ -16,9 +17,12 @@ export default function AdminPage() {
   const [files, setFiles] = useState<KnowledgeFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [importing, setImporting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [driveUrl, setDriveUrl] = useState('');
+  const [description, setDescription] = useState('');
+  const [showDriveInput, setShowDriveInput] = useState(false);
 
   useEffect(() => {
     loadFiles();
@@ -67,37 +71,45 @@ export default function AdminPage() {
   };
 
   const handleFileUpload = async (file: File) => {
-    const validTypes = ['pdf', 'docx', 'txt', 'xlsx'];
+    const validTypes = ['pdf'];
     const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
 
     if (!validTypes.includes(fileExtension)) {
-      alert('نوع الملف غير مدعوم. يرجى رفع PDF, DOCX, TXT, أو XLSX');
+      alert('نوع الملف غير مدعوم. يرجى رفع ملف PDF فقط');
+      return;
+    }
+
+    if (!description.trim()) {
+      alert('يرجى إدخال وصف الملف');
       return;
     }
 
     setUploading(true);
+    setUploadProgress(0);
 
     try {
-      // First extract text
       const formData = new FormData();
       formData.append('file', file);
       formData.append('fileType', fileExtension);
 
+      setUploadProgress(30);
       const extractResponse = await fetch('/api/extract-text', {
         method: 'POST',
         body: formData,
       });
 
       if (!extractResponse.ok) {
-        throw new Error('Failed to extract text');
+        const errorData = await extractResponse.json();
+        throw new Error(errorData.error || 'Failed to extract text');
       }
 
       const extractData = await extractResponse.json();
+      setUploadProgress(60);
 
-      // Then upload file with extracted text
       const uploadFormData = new FormData();
       uploadFormData.append('file', file);
       uploadFormData.append('extractedText', extractData.extractedText);
+      uploadFormData.append('description', description);
 
       const uploadResponse = await fetch('/api/upload', {
         method: 'POST',
@@ -105,22 +117,31 @@ export default function AdminPage() {
       });
 
       if (!uploadResponse.ok) {
-        throw new Error('Failed to upload file');
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.error || 'Failed to upload file');
       }
 
+      setUploadProgress(100);
       await loadFiles();
-      alert('تم رفع الملف بنجاح');
+      setDescription('');
+      alert(`تم رفع الملف بنجاح: ${file.name}`);
     } catch (error) {
       console.error('Upload error:', error);
-      alert('فشل رفع الملف');
+      alert(`فشل رفع الملف: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
   const handleDriveImport = async () => {
     if (!driveUrl.trim()) {
       alert('يرجى إدخال رابط Google Drive');
+      return;
+    }
+
+    if (!description.trim()) {
+      alert('يرجى إدخال وصف الملف');
       return;
     }
 
@@ -133,7 +154,6 @@ export default function AdminPage() {
     setImporting(true);
 
     try {
-      // Download file from Drive
       const fileId = fileIdMatch[1];
       const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
       const response = await fetch(downloadUrl);
@@ -145,7 +165,6 @@ export default function AdminPage() {
       const blob = await response.blob();
       const file = new File([blob], `drive_${fileId}`, { type: blob.type });
 
-      // Determine file type
       const contentType = blob.type || 'application/octet-stream';
       let fileType = 'unknown';
       if (contentType.includes('pdf')) fileType = 'pdf';
@@ -153,7 +172,6 @@ export default function AdminPage() {
       else if (contentType.includes('sheet') || contentType.includes('xlsx')) fileType = 'xlsx';
       else if (contentType.includes('text')) fileType = 'txt';
 
-      // Extract text
       const formData = new FormData();
       formData.append('file', file);
       formData.append('fileType', fileType);
@@ -164,31 +182,35 @@ export default function AdminPage() {
       });
 
       if (!extractResponse.ok) {
-        throw new Error('Failed to extract text');
+        const errorData = await extractResponse.json();
+        throw new Error(errorData.error || 'Failed to extract text');
       }
 
       const extractData = await extractResponse.json();
 
-      // Import with extracted text
       const importResponse = await fetch('/api/import-drive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           driveUrl,
           extractedText: extractData.extractedText,
+          description,
         }),
       });
 
       if (!importResponse.ok) {
-        throw new Error('Failed to import file');
+        const errorData = await importResponse.json();
+        throw new Error(errorData.error || 'Failed to import file');
       }
 
       await loadFiles();
       setDriveUrl('');
+      setDescription('');
+      setShowDriveInput(false);
       alert('تم استيراد الملف بنجاح');
     } catch (error) {
       console.error('Import error:', error);
-      alert('فشل استيراد الملف');
+      alert(`فشل استيراد الملف: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`);
     } finally {
       setImporting(false);
     }
@@ -235,83 +257,94 @@ export default function AdminPage() {
         <p className="text-muted-foreground mb-8">رفع وإدارة الملفات للبحث الذكي</p>
 
         {/* Upload Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Direct Upload */}
-          <div className="glass-card rounded-xl p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <Upload className="w-5 h-5 text-gold" />
-              رفع ملف مباشر
-            </h2>
-            <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
-                dragActive
-                  ? 'border-gold bg-gold/5'
-                  : 'border-border hover:border-gold/50'
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              <input
-                type="file"
-                id="file-upload"
-                className="hidden"
-                accept=".pdf,.docx,.txt,.xlsx"
-                onChange={handleFileSelect}
-                disabled={uploading}
-              />
-              <label
-                htmlFor="file-upload"
-                className="cursor-pointer flex flex-col items-center gap-3"
-              >
-                <Upload className="w-12 h-12 text-muted-foreground" />
-                <div>
-                  <p className="font-medium">اسحب الملف هنا أو انقر للاختيار</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    PDF, DOCX, TXT, XLSX
-                  </p>
-                </div>
-              </label>
-            </div>
-            {uploading && (
-              <div className="mt-4 flex items-center justify-center gap-2 text-gold">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>جارٍ الرفع...</span>
-              </div>
-            )}
-          </div>
+        <div className="glass-card rounded-xl p-6 mb-8">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Upload className="w-5 h-5 text-gold" />
+            رفع الملفات
+          </h2>
 
-          {/* Google Drive Import */}
-          <div className="glass-card rounded-xl p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <ExternalLink className="w-5 h-5 text-gold" />
-              استيراد من Google Drive
-            </h2>
-            <div className="space-y-4">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-right">وصف الملف *</label>
               <input
                 type="text"
-                placeholder="https://drive.google.com/file/d/{fileId}/view"
-                value={driveUrl}
-                onChange={(e) => setDriveUrl(e.target.value)}
+                placeholder="مثال: شيت السلامة المهنية للفصل الثاني"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg input-field"
-                disabled={importing}
+                disabled={uploading || importing}
               />
+            </div>
+
+            <div className="flex gap-4">
               <button
-                onClick={handleDriveImport}
-                disabled={importing || !driveUrl.trim()}
-                className="w-full btn-primary py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => document.getElementById('pdf-upload')?.click()}
+                disabled={uploading || importing || !description.trim()}
+                className="flex-1 btn-primary py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {importing ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    جارٍ الاستيراد...
-                  </span>
-                ) : (
-                  'استيراد الملف'
-                )}
+                <Upload className="w-5 h-5" />
+                رفع ملف PDF
+              </button>
+              <input
+                type="file"
+                id="pdf-upload"
+                className="hidden"
+                accept=".pdf"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (files && files.length > 0) handleFileUpload(files[0]);
+                }}
+                disabled={uploading || importing}
+              />
+
+              <button
+                onClick={() => setShowDriveInput(!showDriveInput)}
+                disabled={uploading || importing || !description.trim()}
+                className="flex-1 btn-primary py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <ExternalLink className="w-5 h-5" />
+                إضافة رابط Google Drive
               </button>
             </div>
+
+            {showDriveInput && (
+              <div className="space-y-3 pt-2">
+                <input
+                  type="text"
+                  placeholder="https://drive.google.com/file/d/{fileId}/view"
+                  value={driveUrl}
+                  onChange={(e) => setDriveUrl(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg input-field"
+                  disabled={importing}
+                />
+                <button
+                  onClick={handleDriveImport}
+                  disabled={importing || !driveUrl.trim()}
+                  className="w-full btn-primary py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {importing ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      جارٍ الاستيراد...
+                    </span>
+                  ) : (
+                    'استيراد الملف'
+                  )}
+                </button>
+              </div>
+            )}
+
+            {uploadProgress > 0 && (
+              <div className="pt-2">
+                <div className="w-full bg-navy-elevated rounded-full h-2">
+                  <div
+                    className="bg-gold h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground mt-2 text-center">{uploadProgress}%</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -339,6 +372,7 @@ export default function AdminPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium truncate">{file.filename}</h3>
+                      <p className="text-sm text-muted-foreground mt-1 truncate">{file.description}</p>
                       <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                         <span className="badge-blue px-2 py-0.5 rounded text-xs">
                           {file.file_type.toUpperCase()}

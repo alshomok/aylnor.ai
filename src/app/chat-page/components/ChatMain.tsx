@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { BotMode, Message, Conversation } from './ChatPageClient';
 import CodeDisplayPanel from './CodeDisplayPanel';
+import FileCard from './FileCard';
 import { useAuth } from '@/contexts/auth-context';
 
 interface ChatMainProps {
@@ -38,8 +39,8 @@ interface ChatMainProps {
 
 const BOT_MODES: { id: BotMode; label: string; icon: React.ElementType; description: string }[] = [
   { id: 'quick', label: 'سريع', icon: Zap, description: 'إجابات سريعة وموجزة' },
-  { id: 'thoughtful', label: 'متأمل', icon: Brain, description: 'شروحات عميقة ومفصلة' },
-  { id: 'programming', label: 'برمجة', icon: Code2, description: 'أولوية الكود مع تمييز الصياغة' },
+  { id: 'thoughtful', label: 'المفكر', icon: Brain, description: 'شروحات عميقة ومفصلة' },
+  { id: 'programming', label: 'مبرمج', icon: Code2, description: 'أولوية الكود مع تمييز الصياغة' },
 ];
 
 const MOCK_RESPONSES: Record<BotMode, (q: string) => Partial<Message>> = {
@@ -219,7 +220,7 @@ export default function ChatMain({
       }
 
       // Validate response data
-      if (!data || !data.content) {
+      if (!data) {
         console.error('Invalid response data:', data);
         throw new Error('Invalid response data from server');
       }
@@ -227,10 +228,11 @@ export default function ChatMain({
       const botMsg: Message = {
         id: `msg-${Date.now()}-bot`,
         role: 'bot',
-        content: data.content,
+        content: data.content || '',
         mode: data.mode,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
         codeBlock: data.codeBlock,
+        fileCard: data.fileCard,
       };
 
       setMessages((prev) => [...prev, botMsg]);
@@ -395,6 +397,18 @@ export default function ChatMain({
                   <p className="whitespace-pre-wrap text-right">
                     {renderMessageContent(msg.content)}
                   </p>
+
+                  {/* File card */}
+                  {msg.fileCard && (
+                    <div className="mt-3">
+                      <FileCard
+                        filename={msg.fileCard.filename}
+                        file_type={msg.fileCard.file_type}
+                        file_url={msg.fileCard.file_url}
+                        description={msg.fileCard.description}
+                      />
+                    </div>
+                  )}
 
                   {/* Inline code block preview */}
                   {msg.codeBlock && (
