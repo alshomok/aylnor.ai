@@ -20,53 +20,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check localStorage for persisted session
-    const storedSession = localStorage.getItem('supabase-session');
-    if (storedSession) {
-      try {
-        const parsedSession = JSON.parse(storedSession);
-        setSession(parsedSession);
-        setUser(parsedSession.user ?? null);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error parsing stored session:', error);
-        localStorage.removeItem('supabase-session');
-      }
-    }
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
 
-    // Get initial session from Supabase
-    if (supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-        // Persist session to localStorage
-        if (session) {
-          localStorage.setItem('supabase-session', JSON.stringify(session));
-        }
-      });
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
 
-      // Listen for auth changes
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-        // Persist session to localStorage
-        if (session) {
-          localStorage.setItem('supabase-session', JSON.stringify(session));
-        } else {
-          localStorage.removeItem('supabase-session');
-        }
-      });
-
-      return () => subscription.unsubscribe();
-    }
+    return () => subscription.unsubscribe();
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    if (!supabase) return { error: { message: 'Supabase not initialized' } as AuthError };
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -82,7 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    if (!supabase) return { error: { message: 'Supabase not initialized' } as AuthError };
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -92,7 +64,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    if (!supabase) return;
     await supabase.auth.signOut();
   };
 
