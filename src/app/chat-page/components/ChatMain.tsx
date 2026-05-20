@@ -650,7 +650,7 @@ export default function ChatMain({
       </div>
 
       {/* Code panel - desktop only */}
-      {showCodePanel && activeCodeBlock && (
+      {activeCodeBlock && showCodePanel && (
         <CodeDisplayPanel codeBlock={activeCodeBlock} onClose={() => setShowCodePanel(false)} />
       )}
 

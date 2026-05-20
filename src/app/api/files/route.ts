@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { filename, file_type, file_url, extracted_text, description, source } = body;
+    const { filename, file_type, file_url, extracted_text, source } = body;
 
-    if (!filename || !file_url || !description) {
+    if (!filename || !file_url) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
         file_type,
         file_url,
         extracted_text,
-        description,
         source: source || 'upload',
       })
       .select()
@@ -58,6 +57,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ file: data });
   } catch (error) {
     console.error('Files API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 });
   }
 }
