@@ -45,6 +45,8 @@ interface ChatSidebarProps {
   username: string;
   onUsernameChange: (name: string) => void;
   onNewChat: () => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 const MODE_COLORS: Record<BotMode, string> = {
@@ -82,6 +84,8 @@ export default function ChatSidebar({
   username,
   onUsernameChange,
   onNewChat,
+  mobileOpen,
+  onMobileClose,
 }: ChatSidebarProps) {
   const { signOut } = useAuth();
   const router = useRouter();
@@ -115,10 +119,22 @@ export default function ChatSidebar({
   }, []);
 
   return (
-    <aside
-      className="sidebar-transition flex flex-col border-l border-border bg-card shrink-0 relative z-10"
-      style={{ width: open ? '260px' : '64px', minHeight: '100vh' }}
-    >
+    <>
+      {/* Mobile drawer overlay */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={onMobileClose}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`sidebar-transition flex flex-col border-l border-border bg-card shrink-0 relative z-10 ${
+          mobileOpen ? 'md:hidden fixed inset-y-0 right-0 w-72' : ''
+        }`}
+        style={{ width: open ? '260px' : '64px', minHeight: '100vh' }}
+      >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-4 border-b border-border">
         {open && (
@@ -159,7 +175,10 @@ export default function ChatSidebar({
       {/* New chat button */}
       <div className="px-3 py-3">
         <button
-          onClick={onNewChat}
+          onClick={() => {
+            onNewChat();
+            onMobileClose?.();
+          }}
           className={`btn-primary flex items-center gap-2 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-95 ${
             open ? 'w-full px-4 py-2.5' : 'w-10 h-10 justify-center mx-auto'
           }`}
@@ -212,7 +231,10 @@ export default function ChatSidebar({
             {filteredConvs.map((conv) => (
               <button
                 key={conv.id}
-                onClick={() => onSelectConversation(conv.id)}
+                onClick={() => {
+                  onSelectConversation(conv.id);
+                  onMobileClose?.();
+                }}
                 className={`w-full text-right rounded-xl sidebar-item-hover transition-all ${
                   conv.id === activeConvId ? 'sidebar-item-active' : ''
                 } ${open ? 'px-3 py-2.5' : 'flex items-center justify-center p-2.5'}`}
@@ -525,5 +547,6 @@ export default function ChatSidebar({
         )}
       </div>
     </aside>
+    </>
   );
 }

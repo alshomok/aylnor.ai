@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { supabase, supabaseServer } from '@/lib/supabase';
-import { generateAIResponse, BotMode, ChatMessage } from '@/lib/ai-service';
+import { generateAIResponseStream, BotMode, ChatMessage } from '@/lib/ai-service';
 
 const DAILY_TOKEN_LIMITS: Record<BotMode, number> = {
   quick: Infinity,
@@ -168,17 +168,24 @@ export async function POST(request: NextRequest) {
       content: msg.content,
     }));
 
-    // Step 1: Search knowledge_base table
-    let foundFile: any = null;
+    // Step 1: Load all knowledge base files as context
     let fileContext = '';
+    let foundFile: any = null;
     try {
       const { data: knowledgeFiles, error: knowledgeError } = await supabase
         .from('knowledge_base')
         .select('id, filename, file_type, file_url, description, extracted_text')
         .order('created_at', { ascending: false });
 
-      if (!knowledgeError && knowledgeFiles) {
-        // Search in filename, description, and extracted_text
+      if (!knowledgeError && knowledgeFiles && knowledgeFiles.length > 0) {
+        // Combine all files as context
+        const allFilesContext = knowledgeFiles.map((file: any) => 
+          `ملف: ${file.filename} - ${file.description}\n${file.extracted_text}`
+        ).join('\n\n---\n\n');
+        
+        fileContext = `قاعدة المعرفة (جميع الملفات):\n${allFilesContext}\n\n---\nأجب على سؤال الطالب بناءً على هذه المعلومات. اشرح بأسلوب أكاديمي مبسط.`;
+        
+        // Also find most relevant file for display
         const userWords = message.toLowerCase().split(/\s+/).filter((word: string) => word.length > 2);
         const relevantFiles = knowledgeFiles.filter((file: any) => {
           const filenameLower = file.filename.toLowerCase();
@@ -191,20 +198,16 @@ export async function POST(request: NextRequest) {
 
         if (relevantFiles.length > 0) {
           foundFile = relevantFiles[0];
-          fileContext = `معلومات من ملف [${foundFile.filename}] - [${foundFile.description}]:
-${foundFile.extracted_text}
----
-أجب على سؤال الطالب بناءً على هذا المحتوى فقط. اشرح بأسلوب أكاديمي مبسط.`;
         }
       }
     } catch (error) {
-      console.warn('Knowledge base search error:', error);
+      console.warn('Knowledge base load error:', error);
     }
 
-    // Step 2: If no file found, try web search
+    // Step 2: If no files in knowledge base, try web search
     let webSearchContext = '';
     let source = 'ai';
-    if (!foundFile) {
+    if (!fileContext) {
       const searchResults = await performWebSearch(message);
       if (searchResults) {
         webSearchContext = `نتائج البحث على الإنترنت:
@@ -230,16 +233,8 @@ ${searchResults}
       content: finalMessage,
     });
 
-    // Generate AI response
-    const aiResponse = await generateAIResponse(chatHistory, mode as BotMode, botPersonality);
-
-    // Format the response based on source
-    let formattedContent = aiResponse.content;
-    if (source === 'file' && foundFile) {
-      formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${aiResponse.content}`;
-    } else if (source === 'web') {
-      formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${aiResponse.content}`;
-    }
+    // Generate AI response with streaming
+    const stream = await generateAIResponseStream(chatHistory, mode as BotMode, botPersonality);
 
     // Save user message to Supabase (skip if local conversation)
     if (!isLocalConversation) {
@@ -256,56 +251,114 @@ ${searchResults}
       }
     }
 
-    // Track token usage (estimate based on message length)
-    if (userId && mode !== 'quick') {
-      const estimatedTokens = message.length / 4 + aiResponse.content.length / 4;
-      await trackTokenUsage(userId, mode as BotMode, Math.floor(estimatedTokens));
-    }
+    // Collect the full response for database storage
+    let fullContent = '';
+    let codeBlock = undefined;
+    let provider = '';
+    let model = '';
 
-    // Save bot response to Supabase (skip if local conversation)
-    if (!isLocalConversation) {
-      const { error: botMessageError } = await server.from('messages').insert({
-        conversation_id: conversationId,
-        role: 'bot',
-        content: formattedContent,
-        mode: aiResponse.mode,
-        code_block: aiResponse.codeBlock,
-      });
+    // Create a readable stream
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
 
-      if (botMessageError) {
-        console.error('Error saving bot message:', botMessageError);
-      }
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of stream.textStream) {
+            fullContent += chunk;
+            controller.enqueue(encoder.encode(chunk));
+          }
 
-      // Update conversation timestamp and last message
-      const { error: updateError } = await server
-        .from('conversations')
-        .update({
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', conversationId);
+          // Extract code block from full content
+          const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+          const matches = [...fullContent.matchAll(codeBlockRegex)];
+          if (matches.length > 0) {
+            const lastMatch = matches[matches.length - 1];
+            codeBlock = {
+              language: lastMatch[1] || 'text',
+              code: lastMatch[2].trim(),
+            };
+          }
 
-      if (updateError) {
-        console.error('Error updating conversation:', updateError);
-      }
-    }
+          // Format the response based on source
+          let formattedContent = fullContent;
+          if (source === 'file' && foundFile) {
+            formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${fullContent}`;
+          } else if (source === 'web') {
+            formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${fullContent}`;
+          }
 
-    return NextResponse.json({
-      content: formattedContent,
-      mode: aiResponse.mode,
-      codeBlock: aiResponse.codeBlock,
-      provider: aiResponse.provider,
-      model: aiResponse.model,
-      fileCard: foundFile ? {
-        id: foundFile.id,
-        filename: foundFile.filename,
-        file_type: foundFile.file_type,
-        file_url: foundFile.file_url,
-        description: foundFile.description,
-      } : null,
-      source,
+          // Track token usage (estimate based on message length)
+          if (userId && mode !== 'quick') {
+            const estimatedTokens = message.length / 4 + fullContent.length / 4;
+            await trackTokenUsage(userId, mode as BotMode, Math.floor(estimatedTokens));
+          }
+
+          // Save bot response to Supabase (skip if local conversation)
+          if (!isLocalConversation) {
+            const { error: botMessageError } = await server.from('messages').insert({
+              conversation_id: conversationId,
+              role: 'bot',
+              content: formattedContent,
+              mode: mode as BotMode,
+              code_block: codeBlock,
+            });
+
+            if (botMessageError) {
+              console.error('Error saving bot message:', botMessageError);
+            }
+
+            // Update conversation timestamp and last message
+            const { error: updateError } = await server
+              .from('conversations')
+              .update({
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', conversationId);
+
+            if (updateError) {
+              console.error('Error updating conversation:', updateError);
+            }
+          }
+
+          // Send final metadata
+          controller.enqueue(encoder.encode('\n\n__METADATA__'));
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                mode,
+                codeBlock,
+                fileCard: foundFile ? {
+                  id: foundFile.id,
+                  filename: foundFile.filename,
+                  file_type: foundFile.file_type,
+                  file_url: foundFile.file_url,
+                  description: foundFile.description,
+                } : null,
+                source,
+              })
+            )
+          );
+
+          controller.close();
+        } catch (error) {
+          console.error('Streaming error:', error);
+          controller.error(error);
+        }
+      },
+    });
+
+    return new Response(readableStream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+      },
     });
   } catch (error) {
     console.error('Chat API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

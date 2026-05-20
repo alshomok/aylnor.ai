@@ -44,6 +44,8 @@ export default function ChatPageClient() {
   const [botPersonality, setBotPersonality] = useState('مساعد مفيد ودقيق وأكاديمي');
   const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'chat' | 'code'>('chat');
 
   const themeClass = theme === 'light' ? 'light' : '';
 
@@ -229,6 +231,10 @@ export default function ChatPageClient() {
         conversations={conversations}
         setConversations={setConversations}
         onCreateConversation={createNewConversation}
+        mobileSidebarOpen={mobileSidebarOpen}
+        onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+        mobileTab={mobileTab}
+        onMobileTabChange={setMobileTab}
       />
       <ChatSidebar
         open={sidebarOpen}
@@ -245,6 +251,8 @@ export default function ChatPageClient() {
         username={username}
         onUsernameChange={setUsername}
         onNewChat={createNewConversation}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
       />
     </div>
   );

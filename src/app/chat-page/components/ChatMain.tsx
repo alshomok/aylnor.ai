@@ -5,7 +5,6 @@ import {
   Brain,
   Code2,
   Send,
-  Paperclip,
   PanelRight,
   PanelRightClose,
   Menu,
@@ -35,6 +34,10 @@ interface ChatMainProps {
   conversations: Conversation[];
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
   onCreateConversation: () => Promise<string | null>;
+  mobileSidebarOpen: boolean;
+  onToggleMobileSidebar: () => void;
+  mobileTab: 'chat' | 'code';
+  onMobileTabChange: (tab: 'chat' | 'code') => void;
 }
 
 const BOT_MODES: { id: BotMode; label: string; icon: React.ElementType; description: string }[] = [
@@ -106,6 +109,10 @@ export default function ChatMain({
   conversations,
   setConversations,
   onCreateConversation,
+  mobileSidebarOpen,
+  onToggleMobileSidebar,
+  mobileTab,
+  onMobileTabChange,
 }: ChatMainProps) {
   const { user } = useAuth();
   const [inputValue, setInputValue] = useState('');
@@ -117,7 +124,6 @@ export default function ChatMain({
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeConv = conversations.find((c) => c.id === activeConvId);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
@@ -204,42 +210,73 @@ export default function ChatMain({
         throw new Error('Failed to get response');
       }
 
-      // Handle empty response body
-      const responseText = await response.text();
-      if (!responseText || responseText.trim() === '') {
-        console.error('Empty response body');
-        throw new Error('Empty response from server');
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+      let metadata = null;
+
+      if (!reader) {
+        throw new Error('No response body');
       }
 
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('JSON parse error:', parseError, 'Response text:', responseText);
-        throw new Error('Invalid JSON response from server');
-      }
-
-      // Validate response data
-      if (!data) {
-        console.error('Invalid response data:', data);
-        throw new Error('Invalid response data from server');
-      }
-
+      // Create bot message with empty content initially
       const botMsg: Message = {
         id: `msg-${Date.now()}-bot`,
         role: 'bot',
-        content: data.content || '',
-        mode: data.mode,
+        content: '',
+        mode: activeMode,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-        codeBlock: data.codeBlock,
-        fileCard: data.fileCard,
       };
 
       setMessages((prev) => [...prev, botMsg]);
-      if (botMsg.codeBlock) {
-        setActiveCodeBlock(botMsg.codeBlock);
-        setShowCodePanel(true);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        fullContent += chunk;
+
+        // Check for metadata separator
+        if (fullContent.includes('__METADATA__')) {
+          const [contentPart, metadataPart] = fullContent.split('__METADATA__');
+          fullContent = contentPart;
+          try {
+            metadata = JSON.parse(metadataPart.trim());
+          } catch (e) {
+            console.error('Failed to parse metadata:', e);
+          }
+        }
+
+        // Update message content
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === botMsg.id ? { ...msg, content: fullContent } : msg
+          )
+        );
       }
+
+      // Final update with metadata
+      if (metadata) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === botMsg.id
+              ? {
+                  ...msg,
+                  codeBlock: metadata.codeBlock,
+                  fileCard: metadata.fileCard,
+                }
+              : msg
+          )
+        );
+
+        if (metadata.codeBlock) {
+          setActiveCodeBlock(metadata.codeBlock);
+          setShowCodePanel(true);
+        }
+      }
+
       console.debug('Message sent successfully');
     } catch (error) {
       console.error('Error sending message:', error);
@@ -297,9 +334,16 @@ export default function ChatMain({
         {/* Top bar */}
         <div className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-border bg-card shrink-0">
           <div className="flex items-center gap-2">
+            {/* Mobile menu button */}
+            <button
+              onClick={onToggleMobileSidebar}
+              className="md:hidden text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-white/5"
+            >
+              <Menu size={18} />
+            </button>
             <button
               onClick={() => setShowCodePanel(!showCodePanel)}
-              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 ${
+              className={`hidden md:flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 ${
                 showCodePanel
                   ? 'badge-blue border-royal-blue/30'
                   : 'text-muted-foreground border-border hover:border-royal-blue/30 hover:text-foreground'
@@ -322,12 +366,36 @@ export default function ChatMain({
             {!sidebarOpen && (
               <button
                 onClick={onToggleSidebar}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-white/5"
+                className="hidden md:block text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-white/5"
               >
                 <Menu size={18} />
               </button>
             )}
           </div>
+        </div>
+
+        {/* Mobile tabs */}
+        <div className="flex md:hidden border-b border-border bg-card/50 shrink-0">
+          <button
+            onClick={() => onMobileTabChange('chat')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-all duration-150 border-b-2 ${
+              mobileTab === 'chat' ? 'text-gold border-gold' : 'text-muted-foreground border-transparent'
+            }`}
+          >
+            <MessageSquare size={13} />
+            الشات
+          </button>
+          {activeCodeBlock && (
+            <button
+              onClick={() => onMobileTabChange('code')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-all duration-150 border-b-2 ${
+                mobileTab === 'code' ? 'text-gold border-gold' : 'text-muted-foreground border-transparent'
+              }`}
+            >
+              <Code2 size={13} />
+              الكود
+            </button>
+          )}
         </div>
 
         {/* Mode selector */}
@@ -353,8 +421,8 @@ export default function ChatMain({
           })}
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-3 sm:px-4 py-6 space-y-5">
+        {/* Messages - hidden on mobile when code tab is active */}
+        <div className={`flex-1 overflow-y-auto scrollbar-thin px-3 sm:px-4 py-6 space-y-5 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
           {messages.map((msg) => (
             <div
               key={msg.id}
@@ -421,6 +489,7 @@ export default function ChatMain({
                           onClick={() => {
                             setActiveCodeBlock(msg.codeBlock!);
                             setShowCodePanel(true);
+                            onMobileTabChange('code');
                           }}
                           className="text-2xs text-royal-blue-light hover:text-gold transition-colors font-semibold"
                         >
@@ -510,8 +579,8 @@ export default function ChatMain({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input area */}
-        <div className="px-3 sm:px-4 py-4 border-t border-border bg-card shrink-0">
+        {/* Input area - hidden on mobile when code tab is active */}
+        <div className={`px-3 sm:px-4 py-4 border-t border-border bg-card shrink-0 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
           <div className="flex items-end gap-2 bg-input border border-border rounded-2xl px-4 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all flex-row-reverse">
             {/* Send button */}
             <button
@@ -572,26 +641,6 @@ export default function ChatMain({
               style={{ maxHeight: '160px' }}
               dir="rtl"
             />
-
-            {/* File upload */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept=".pdf,.txt,.md,.py,.js,.ts,.jsx,.tsx,.java,.cpp,.c"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) setInputValue(`[مرفق: ${file.name}] `);
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="text-muted-foreground hover:text-gold transition-colors p-1 shrink-0 mb-0.5"
-              title="إرفاق ملف (PDF، ملفات كود، نصوص)"
-            >
-              <Paperclip size={18} />
-            </button>
           </div>
           <p className="text-2xs text-muted-foreground text-center mt-2">
             aylnor.ai قد يخطئ. تحقق من المعلومات المهمة بشكل مستقل.
@@ -599,9 +648,16 @@ export default function ChatMain({
         </div>
       </div>
 
-      {/* Code panel */}
-      {showCodePanel && (
+      {/* Code panel - desktop only */}
+      {showCodePanel && activeCodeBlock && (
         <CodeDisplayPanel codeBlock={activeCodeBlock} onClose={() => setShowCodePanel(false)} />
+      )}
+
+      {/* Mobile code panel - shown when code tab is active */}
+      {mobileTab === 'code' && activeCodeBlock && (
+        <div className="md:hidden flex-1 overflow-hidden">
+          <CodeDisplayPanel codeBlock={activeCodeBlock} onClose={() => onMobileTabChange('chat')} />
+        </div>
       )}
     </div>
   );

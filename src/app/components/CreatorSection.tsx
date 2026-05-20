@@ -23,34 +23,16 @@ export default function CreatorSection() {
               عن المطور
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-4">
-              بُني بواسطة مطور، <span className="text-gold">للمتعلمين</span>
+              تم تطويره بواسطة الطالب المهندس: <span className="text-gold">أحمد قريز</span>
             </h2>
             <p className="text-muted-foreground text-base leading-relaxed mb-6">
-              تم إنشاء aylnor.ai بواسطة{' '}
-              <span className="text-foreground font-semibold">Aylnor Vasquez</span>، مطور full-stack
-              وخريج علوم حاسوب سئم من التنقل بين خمس أدوات مختلفة للدراسة والبرمجة. الرؤية: مساعد
-              ذكي واحد يفهم السياق الأكاديمي وتحديات البرمجة الواقعية.
+              تم إنشاء aylnor.ai بواسطة الطالب المهندس أحمد قريز، مطور full-stack وخريج علوم حاسوب.
+              الرؤية: مساعد ذكي واحد يفهم السياق الأكاديمي وتحديات البرمجة الواقعية.
             </p>
             <p className="text-muted-foreground text-base leading-relaxed mb-8">
               كل ميزة — من أوضاع البوت إلى ذاكرة المحادثات — صُممت حول سير عمل الطلاب والمطورين
               الفعليين، واختُبرت عبر مئات الجلسات قبل الإطلاق.
             </p>
-            <div className="flex items-center gap-4 flex-row-reverse">
-              <a
-                href="#"
-                className="inline-flex items-center gap-2 btn-primary px-5 py-2.5 rounded-lg text-sm font-semibold"
-              >
-                <GitBranch size={16} />
-                عرض الكود المصدري
-              </a>
-              <a
-                href="#"
-                className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground nav-link-hover"
-              >
-                <Globe size={16} />
-                المحفظة
-              </a>
-            </div>
           </div>
 
           {/* Tech stack */}

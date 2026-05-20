@@ -43,8 +43,7 @@ export default function HeroSection() {
   }, [charIndex, deleting, phraseIndex]);
 
   const stats = [
-    { label: 'موضوع أكاديمي', value: '+200' },
-    { label: 'لغة برمجة مدعومة', value: '+40' },
+    { label: 'لغة برمجة مدعومة', value: '+20' },
     { label: 'ظروف للبوت', value: '3' },
   ];
 

@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Trash2, ExternalLink, Loader2 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 
 interface KnowledgeFile {
   id: string;
@@ -23,6 +24,12 @@ export default function AdminPage() {
   const [driveUrl, setDriveUrl] = useState('');
   const [description, setDescription] = useState('');
   const [showDriveInput, setShowDriveInput] = useState(false);
+
+  // Initialize Supabase client for direct client-side upload
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   useEffect(() => {
     loadFiles();
@@ -88,11 +95,12 @@ export default function AdminPage() {
     setUploadProgress(0);
 
     try {
+      // Step 1: Extract text from PDF
+      setUploadProgress(20);
       const formData = new FormData();
       formData.append('file', file);
       formData.append('fileType', fileExtension);
 
-      setUploadProgress(30);
       const extractResponse = await fetch('/api/extract-text', {
         method: 'POST',
         body: formData,
@@ -104,21 +112,47 @@ export default function AdminPage() {
       }
 
       const extractData = await extractResponse.json();
-      setUploadProgress(60);
+      setUploadProgress(40);
 
-      const uploadFormData = new FormData();
-      uploadFormData.append('file', file);
-      uploadFormData.append('extractedText', extractData.extractedText);
-      uploadFormData.append('description', description);
+      // Step 2: Upload directly to Supabase Storage from client
+      const fileName = `${Date.now()}_${file.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('knowledge-base')
+        .upload(`files/${fileName}`, file, {
+          contentType: file.type,
+          upsert: false,
+        });
 
-      const uploadResponse = await fetch('/api/upload', {
+      if (uploadError) {
+        throw new Error(uploadError.message || 'Failed to upload to Supabase Storage');
+      }
+
+      setUploadProgress(70);
+
+      // Step 3: Get public URL
+      const { data: urlData } = supabase.storage
+        .from('knowledge-base')
+        .getPublicUrl(`files/${fileName}`);
+
+      setUploadProgress(85);
+
+      // Step 4: Save metadata to database via API
+      const saveResponse = await fetch('/api/files', {
         method: 'POST',
-        body: uploadFormData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          file_type: file.type,
+          file_url: urlData.publicUrl,
+          extracted_text: extractData.extractedText,
+          description,
+          source: 'upload',
+        }),
       });
 
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json();
-        throw new Error(errorData.error || 'Failed to upload file');
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json();
+        throw new Error(errorData.error || 'Failed to save file metadata');
       }
 
       setUploadProgress(100);
@@ -145,72 +179,50 @@ export default function AdminPage() {
       return;
     }
 
-    const fileIdMatch = driveUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-    if (!fileIdMatch) {
-      alert('تنسيق الرابط غير صحيح. يجب أن يكون: https://drive.google.com/file/d/{fileId}/view');
-      return;
-    }
-
     setImporting(true);
 
     try {
-      const fileId = fileIdMatch[1];
-      const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-      const response = await fetch(downloadUrl);
+      // Function to convert Google Drive link to direct download link
+      const convertToDirectDownloadLink = (url: string): string => {
+        const fileIdMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+        if (fileIdMatch) {
+          const fileId = fileIdMatch[1];
+          return `https://drive.google.com/uc?export=download&id=${fileId}`;
+        }
+        // If not a Google Drive link, return as is
+        return url;
+      };
 
-      if (!response.ok) {
-        throw new Error('Failed to download file from Google Drive');
-      }
+      // Convert the link before saving
+      const directDownloadUrl = convertToDirectDownloadLink(driveUrl);
 
-      const blob = await response.blob();
-      const file = new File([blob], `drive_${fileId}`, { type: blob.type });
-
-      const contentType = blob.type || 'application/octet-stream';
-      let fileType = 'unknown';
-      if (contentType.includes('pdf')) fileType = 'pdf';
-      else if (contentType.includes('word') || contentType.includes('docx')) fileType = 'docx';
-      else if (contentType.includes('sheet') || contentType.includes('xlsx')) fileType = 'xlsx';
-      else if (contentType.includes('text')) fileType = 'txt';
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('fileType', fileType);
-
-      const extractResponse = await fetch('/api/extract-text', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!extractResponse.ok) {
-        const errorData = await extractResponse.json();
-        throw new Error(errorData.error || 'Failed to extract text');
-      }
-
-      const extractData = await extractResponse.json();
-
-      const importResponse = await fetch('/api/import-drive', {
+      // Save Google Drive link directly to database without downloading the file
+      const saveResponse = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          driveUrl,
-          extractedText: extractData.extractedText,
+          filename: `Google Drive File - ${description}`,
+          file_type: 'google_drive',
+          file_url: directDownloadUrl,
+          extracted_text: `ملف من Google Drive: ${directDownloadUrl}`,
           description,
+          source: 'google_drive',
         }),
       });
 
-      if (!importResponse.ok) {
-        const errorData = await importResponse.json();
-        throw new Error(errorData.error || 'Failed to import file');
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json();
+        throw new Error(errorData.error || 'Failed to save Google Drive link');
       }
 
       await loadFiles();
       setDriveUrl('');
       setDescription('');
       setShowDriveInput(false);
-      alert('تم استيراد الملف بنجاح');
+      alert('تم حفظ رابط Google Drive بنجاح');
     } catch (error) {
       console.error('Import error:', error);
-      alert(`فشل استيراد الملف: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`);
+      alert(`فشل حفظ الرابط: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`);
     } finally {
       setImporting(false);
     }
