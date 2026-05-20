@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Upload, FileText, Trash2, ExternalLink, Loader2 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -25,11 +25,11 @@ export default function AdminPage() {
   const [description, setDescription] = useState('');
   const [showDriveInput, setShowDriveInput] = useState(false);
 
-  // Initialize Supabase client for direct client-side upload
-  const supabase = createClient(
+  // Initialize Supabase client for direct client-side upload (singleton)
+  const supabase = useMemo(() => createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  ), []);
 
   useEffect(() => {
     loadFiles();
@@ -107,15 +107,40 @@ export default function AdminPage() {
       });
 
       if (!extractResponse.ok) {
-        const errorData = await extractResponse.json();
-        throw new Error(errorData.error || 'Failed to extract text');
+        const errorText = await extractResponse.text();
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.error || 'Failed to extract text');
+        } catch {
+          throw new Error(errorText || 'Failed to extract text');
+        }
       }
 
-      const extractData = await extractResponse.json();
+      const extractText = await extractResponse.text();
+      let extractData;
+      try {
+        extractData = JSON.parse(extractText);
+      } catch {
+        throw new Error('Invalid response from extract-text API');
+      }
       setUploadProgress(40);
 
       // Step 2: Upload directly to Supabase Storage from client
       const fileName = `${Date.now()}_${file.name}`;
+      
+      // Check if bucket exists, if not create it
+      const { data: buckets } = await supabase.storage.listBuckets();
+      const bucketExists = buckets?.some(b => b.name === 'knowledge-base');
+      
+      if (!bucketExists) {
+        const { error: createError } = await supabase.storage.createBucket('knowledge-base', {
+          public: true,
+        });
+        if (createError) {
+          throw new Error(`Failed to create bucket: ${createError.message}`);
+        }
+      }
+
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('knowledge-base')
         .upload(`files/${fileName}`, file, {
@@ -151,8 +176,13 @@ export default function AdminPage() {
       });
 
       if (!saveResponse.ok) {
-        const errorData = await saveResponse.json();
-        throw new Error(errorData.error || 'Failed to save file metadata');
+        const errorText = await saveResponse.text();
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.error || 'Failed to save file metadata');
+        } catch {
+          throw new Error(errorText || 'Failed to save file metadata');
+        }
       }
 
       setUploadProgress(100);

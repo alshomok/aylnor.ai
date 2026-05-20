@@ -117,6 +117,7 @@ export type Database = {
           bot_name: string;
           bot_personality: string;
           theme: 'dark' | 'light';
+          ip_address: string;
           created_at: string;
           updated_at: string;
         };
@@ -127,6 +128,7 @@ export type Database = {
           bot_name?: string;
           bot_personality?: string;
           theme?: 'dark' | 'light';
+          ip_address?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -137,6 +139,7 @@ export type Database = {
           bot_name?: string;
           bot_personality?: string;
           theme?: 'dark' | 'light';
+          ip_address?: string;
           created_at?: string;
           updated_at?: string;
         };

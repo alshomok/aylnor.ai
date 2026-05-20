@@ -1,20 +1,33 @@
 'use client';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ChatPageClient from './components/ChatPageClient';
 import { useAuth } from '@/contexts/auth-context';
 
 export default function ChatPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, checkIpLogin } = useAuth();
   const router = useRouter();
+  const [ipChecked, setIpChecked] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/sign-up-login-screen');
-    }
-  }, [user, loading, router]);
+    const checkAuth = async () => {
+      if (!loading && !user) {
+        // Check if user is remembered by IP
+        const hasIpLogin = await checkIpLogin();
+        if (hasIpLogin) {
+          // Redirect to login with email pre-filled
+          router.push('/sign-up-login-screen?remembered=true');
+        } else {
+          router.push('/sign-up-login-screen');
+        }
+      }
+      setIpChecked(true);
+    };
 
-  if (loading) {
+    checkAuth();
+  }, [user, loading, router, checkIpLogin]);
+
+  if (loading || !ipChecked) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-foreground">
         <div className="text-center">

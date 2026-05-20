@@ -400,8 +400,8 @@ export default function ChatMain({
         </div>
 
         {/* Mode selector */}
-        <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5 border-b border-border bg-card/50 shrink-0 flex-row-reverse flex-wrap">
-          <span className="text-2xs text-muted-foreground font-semibold uppercase tracking-widest mr-1">
+        <div className="flex items-center gap-2 px-2 sm:px-4 py-2 border-b border-border bg-card/50 shrink-0 flex-row-reverse flex-wrap">
+          <span className="text-2xs text-muted-foreground font-semibold uppercase tracking-widest mr-1 hidden sm:block">
             :الوضع
           </span>
           {BOT_MODES.map((mode) => {
@@ -410,13 +410,13 @@ export default function ChatMain({
               <button
                 key={`mode-${mode.id}`}
                 onClick={() => setActiveMode(mode.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 active:scale-95 ${
+                className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 active:scale-95 ${
                   activeMode === mode.id ? 'mode-chip-active' : 'mode-chip-inactive'
                 }`}
                 title={mode.description}
               >
                 <ModeIcon size={12} />
-                {mode.label}
+                <span className="hidden sm:inline">{mode.label}</span>
               </button>
             );
           })}
@@ -581,13 +581,13 @@ export default function ChatMain({
         </div>
 
         {/* Input area - hidden on mobile when code tab is active */}
-        <div className={`px-3 sm:px-4 py-4 border-t border-border bg-card shrink-0 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
-          <div className="flex items-end gap-2 bg-input border border-border rounded-2xl px-4 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all flex-row-reverse">
+        <div className={`px-2 sm:px-4 py-3 sm:py-4 border-t border-border bg-card shrink-0 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
+          <div className="flex items-end gap-2 bg-input border border-border rounded-2xl px-3 sm:px-4 py-2 sm:py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 transition-all flex-row-reverse">
             {/* Send button */}
             <button
               onClick={() => sendMessage()}
               disabled={isSending || !inputValue.trim()}
-              className="btn-primary p-2.5 rounded-xl shrink-0 mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
+              className="btn-primary p-2 sm:p-2.5 rounded-xl shrink-0 mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
               title="إرسال الرسالة (Enter)"
             >
               <Send size={16} className="rotate-180" />
@@ -597,18 +597,18 @@ export default function ChatMain({
             <div className="relative shrink-0 mb-0.5">
               <button
                 onClick={() => setShowModeDropdown(!showModeDropdown)}
-                className="flex items-center gap-1 px-3 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors text-sm"
+                className="flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors text-xs sm:text-sm"
                 title="اختر وضع البوت"
               >
                 {BOT_MODES.find((m) => m.id === activeMode)?.icon && (
-                  React.createElement(BOT_MODES.find((m) => m.id === activeMode)!.icon, { size: 14 })
+                  React.createElement(BOT_MODES.find((m) => m.id === activeMode)!.icon, { size: 12 })
                 )}
-                <span className="text-xs">{BOT_MODES.find((m) => m.id === activeMode)?.label}</span>
+                <span className="hidden sm:inline text-xs">{BOT_MODES.find((m) => m.id === activeMode)?.label}</span>
                 <ChevronDown size={12} />
               </button>
 
               {showModeDropdown && (
-                <div className="absolute bottom-full right-0 mb-2 w-48 bg-card border border-border rounded-lg shadow-lg z-50">
+                <div className="absolute bottom-full right-0 mb-2 w-44 sm:w-48 bg-card border border-border rounded-lg shadow-lg z-50">
                   {BOT_MODES.map((mode) => (
                     <button
                       key={mode.id}
@@ -616,14 +616,14 @@ export default function ChatMain({
                         setActiveMode(mode.id);
                         setShowModeDropdown(false);
                       }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-right hover:bg-muted/50 transition-colors ${
+                      className={`w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-right hover:bg-muted/50 transition-colors ${
                         activeMode === mode.id ? 'bg-muted' : ''
                       }`}
                     >
-                      {React.createElement(mode.icon, { size: 14 })}
+                      {React.createElement(mode.icon, { size: 12 })}
                       <div className="flex-1">
-                        <div className="font-medium">{mode.label}</div>
-                        <div className="text-xs text-muted-foreground">{mode.description}</div>
+                        <div className="font-medium text-xs">{mode.label}</div>
+                        <div className="text-xs text-muted-foreground hidden sm:block">{mode.description}</div>
                       </div>
                     </button>
                   ))}
@@ -638,12 +638,12 @@ export default function ChatMain({
               onKeyDown={handleKeyDown}
               placeholder={`اسأل ${botName} أي شيء… (Shift+Enter لسطر جديد)`}
               rows={1}
-              className="flex-1 bg-transparent text-sm text-foreground placeholder-muted-foreground resize-none focus:outline-none scrollbar-thin text-right"
-              style={{ maxHeight: '160px' }}
+              className="flex-1 bg-transparent text-xs sm:text-sm text-foreground placeholder-muted-foreground resize-none focus:outline-none scrollbar-thin text-right"
+              style={{ maxHeight: '120px' }}
               dir="rtl"
             />
           </div>
-          <p className="text-2xs text-muted-foreground text-center mt-2">
+          <p className="text-2xs text-muted-foreground text-center mt-2 hidden sm:block">
             aylnor.ai قد يخطئ. تحقق من المعلومات المهمة بشكل مستقل.
           </p>
         </div>

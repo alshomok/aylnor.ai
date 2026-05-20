@@ -97,6 +97,9 @@ create policy "Allow service role to insert token usage"
 create index if not exists token_usage_user_date_idx on token_usage(user_id, date);
 create index if not exists token_usage_mode_idx on token_usage(mode);
 
+-- 11. Add IP address column to users table for IP-based login
+alter table users add column if not exists ip_address text;
+
 -- ============================================
 -- Notes:
 -- - The bucket is set to public so files are accessible via URL
@@ -106,4 +109,5 @@ create index if not exists token_usage_mode_idx on token_usage(mode);
 -- - RLS policies allow the bot to search the knowledge base while requiring auth for uploads/deletes
 -- - token_usage table tracks daily token usage per user per mode
 -- - Quick mode has unlimited budget, thoughtful and programming modes have 400,000 tokens/day
+-- - ip_address column in users table stores the user's IP for IP-based login persistence
 -- ============================================

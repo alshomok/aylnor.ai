@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseServer } from '@/lib/supabase';
 import { generateAIResponseStream, BotMode, ChatMessage } from '@/lib/ai-service';
 
@@ -171,6 +171,7 @@ export async function POST(request: NextRequest) {
     // Step 1: Load all knowledge base files as context
     let fileContext = '';
     let foundFile: any = null;
+    let isFileRequest = false;
     try {
       const { data: knowledgeFiles, error: knowledgeError } = await supabase
         .from('knowledge_base')
@@ -178,6 +179,10 @@ export async function POST(request: NextRequest) {
         .order('created_at', { ascending: false });
 
       if (!knowledgeError && knowledgeFiles && knowledgeFiles.length > 0) {
+        // Check if user is requesting a specific file
+        const fileRequestKeywords = ['شيت', 'ملف', 'pdf', 'تحميل', 'أريد', 'نبي', 'أعطني'];
+        isFileRequest = fileRequestKeywords.some(keyword => message.toLowerCase().includes(keyword));
+
         // Combine all files as context
         const allFilesContext = knowledgeFiles.map((file: any) => 
           `ملف: ${file.filename} - ${file.description}\n${file.extracted_text}`
@@ -185,7 +190,7 @@ export async function POST(request: NextRequest) {
         
         fileContext = `قاعدة المعرفة (جميع الملفات):\n${allFilesContext}\n\n---\nأجب على سؤال الطالب بناءً على هذه المعلومات. اشرح بأسلوب أكاديمي مبسط.`;
         
-        // Also find most relevant file for display
+        // Find most relevant file for display
         const userWords = message.toLowerCase().split(/\s+/).filter((word: string) => word.length > 2);
         const relevantFiles = knowledgeFiles.filter((file: any) => {
           const filenameLower = file.filename.toLowerCase();
@@ -253,7 +258,7 @@ ${searchResults}
 
     // Collect the full response for database storage
     let fullContent = '';
-    let codeBlock = undefined;
+    let codeBlock: { language: string; code: string } | undefined = undefined;
     let provider = '';
     let model = '';
 
@@ -328,7 +333,7 @@ ${searchResults}
               JSON.stringify({
                 mode,
                 codeBlock,
-                fileCard: foundFile ? {
+                fileCard: (isFileRequest && foundFile) ? {
                   id: foundFile.id,
                   filename: foundFile.filename,
                   file_type: foundFile.file_type,
