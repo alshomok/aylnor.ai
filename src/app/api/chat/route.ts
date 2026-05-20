@@ -70,6 +70,47 @@ async function trackTokenUsage(userId: string, mode: BotMode, tokensUsed: number
   }
 }
 
+async function performWebSearch(query: string): Promise<string> {
+  const apiKey = process.env.SEARCH_API_KEY;
+  if (!apiKey) {
+    console.warn('SEARCH_API_KEY not configured');
+    return '';
+  }
+
+  try {
+    const response = await fetch('https://api.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        q: query,
+        num: 3,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('Web search API error:', response.status);
+      return '';
+    }
+
+    const data = await response.json();
+    if (!data.organic || data.organic.length === 0) {
+      return '';
+    }
+
+    const results = data.organic.slice(0, 3).map((result: any) => {
+      return `- ${result.title}\n  ${result.snippet}\n  ${result.link}`;
+    }).join('\n\n');
+
+    return results;
+  } catch (error) {
+    console.error('Web search error:', error);
+    return '';
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -127,8 +168,9 @@ export async function POST(request: NextRequest) {
       content: msg.content,
     }));
 
-    // Search knowledge base for relevant files
+    // Step 1: Search knowledge_base table
     let foundFile: any = null;
+    let fileContext = '';
     try {
       const { data: knowledgeFiles, error: knowledgeError } = await supabase
         .from('knowledge_base')
@@ -149,66 +191,55 @@ export async function POST(request: NextRequest) {
 
         if (relevantFiles.length > 0) {
           foundFile = relevantFiles[0];
+          fileContext = `معلومات من ملف [${foundFile.filename}] - [${foundFile.description}]:
+${foundFile.extracted_text}
+---
+أجب على سؤال الطالب بناءً على هذا المحتوى فقط. اشرح بأسلوب أكاديمي مبسط.`;
         }
       }
     } catch (error) {
       console.warn('Knowledge base search error:', error);
     }
 
-    // If a file is found, return file card data instead of AI response
-    if (foundFile) {
-      return NextResponse.json({
-        content: '',
-        fileCard: {
-          id: foundFile.id,
-          filename: foundFile.filename,
-          file_type: foundFile.file_type,
-          file_url: foundFile.file_url,
-          description: foundFile.description,
-        },
-      });
-    }
-
-    // Search knowledge base for relevant content (context only)
-    let knowledgeContext = '';
-    try {
-      const { data: knowledgeFiles, error: knowledgeError } = await supabase
-        .from('knowledge_base')
-        .select('filename, extracted_text')
-        .order('created_at', { ascending: false });
-
-      if (!knowledgeError && knowledgeFiles) {
-        const userWords = message.toLowerCase().split(/\s+/).filter((word: string) => word.length > 3);
-        const relevantFiles = knowledgeFiles.filter((file: any) => {
-          const filenameLower = file.filename.toLowerCase();
-          const textLower = file.extracted_text.toLowerCase();
-          return userWords.some((word: string) => 
-            filenameLower.includes(word) || textLower.includes(word)
-          );
-        });
-
-        if (relevantFiles.length > 0) {
-          knowledgeContext = '\n\n--- معلومات من قاعدة المعرفة ---\n';
-          relevantFiles.forEach((file: any, index: number) => {
-            knowledgeContext += `\nالملف: ${file.filename}\n`;
-            knowledgeContext += `المحتوى: ${file.extracted_text.substring(0, 2000)}...\n`;
-          });
-          knowledgeContext += '--- نهاية معلومات قاعدة المعرفة ---\n';
-        }
+    // Step 2: If no file found, try web search
+    let webSearchContext = '';
+    let source = 'ai';
+    if (!foundFile) {
+      const searchResults = await performWebSearch(message);
+      if (searchResults) {
+        webSearchContext = `نتائج البحث على الإنترنت:
+${searchResults}
+---
+أجب بناءً على هذه المعلومات. وضح للطالب أن هذه المعلومات من الإنترنت وليس من ملف محفوظ.`;
+        source = 'web';
       }
-    } catch (error) {
-      console.warn('Knowledge base search error:', error);
+    } else {
+      source = 'file';
     }
 
-    // Add current user message with knowledge context if available
-    const userMessageWithContext = knowledgeContext 
-      ? `${message}${knowledgeContext}`
-      : message;
+    // Prepare the user message with context
+    let finalMessage = message;
+    if (fileContext) {
+      finalMessage = `${fileContext}\n\nسؤال الطالب: ${message}`;
+    } else if (webSearchContext) {
+      finalMessage = `${webSearchContext}\n\nسؤال الطالب: ${message}`;
+    }
 
     chatHistory.push({
       role: 'user',
-      content: userMessageWithContext,
+      content: finalMessage,
     });
+
+    // Generate AI response
+    const aiResponse = await generateAIResponse(chatHistory, mode as BotMode, botPersonality);
+
+    // Format the response based on source
+    let formattedContent = aiResponse.content;
+    if (source === 'file' && foundFile) {
+      formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${aiResponse.content}`;
+    } else if (source === 'web') {
+      formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${aiResponse.content}`;
+    }
 
     // Save user message to Supabase (skip if local conversation)
     if (!isLocalConversation) {
@@ -225,9 +256,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate AI response
-    const aiResponse = await generateAIResponse(chatHistory, mode as BotMode, botPersonality);
-
     // Track token usage (estimate based on message length)
     if (userId && mode !== 'quick') {
       const estimatedTokens = message.length / 4 + aiResponse.content.length / 4;
@@ -239,7 +267,7 @@ export async function POST(request: NextRequest) {
       const { error: botMessageError } = await server.from('messages').insert({
         conversation_id: conversationId,
         role: 'bot',
-        content: aiResponse.content,
+        content: formattedContent,
         mode: aiResponse.mode,
         code_block: aiResponse.codeBlock,
       });
@@ -262,11 +290,19 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      content: aiResponse.content,
+      content: formattedContent,
       mode: aiResponse.mode,
       codeBlock: aiResponse.codeBlock,
       provider: aiResponse.provider,
       model: aiResponse.model,
+      fileCard: foundFile ? {
+        id: foundFile.id,
+        filename: foundFile.filename,
+        file_type: foundFile.file_type,
+        file_url: foundFile.file_url,
+        description: foundFile.description,
+      } : null,
+      source,
     });
   } catch (error) {
     console.error('Chat API error:', error);

@@ -4,6 +4,8 @@ import pdf from 'pdf-parse';
 import mammoth from 'mammoth';
 import xlsx from 'xlsx';
 
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   const timeoutPromise = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('Request timeout')), 30000)
@@ -15,7 +17,7 @@ export async function POST(request: NextRequest) {
     const fileType = formData.get('fileType') as string;
 
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -48,15 +50,15 @@ export async function POST(request: NextRequest) {
         break;
 
       default:
-        return NextResponse.json({ error: 'Unsupported file type' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Unsupported file type' }, { status: 400 });
     }
 
-    return NextResponse.json({ extractedText });
+    return NextResponse.json({ success: true, extractedText });
   } catch (error) {
     console.error('Text extraction error:', error);
     if (error instanceof Error && error.message === 'Request timeout') {
-      return NextResponse.json({ error: 'Extraction timeout - file too large' }, { status: 408 });
+      return NextResponse.json({ success: false, error: 'Extraction timeout - file too large' }, { status: 408 });
     }
-    return NextResponse.json({ error: 'Failed to extract text' }, { status: 500 });
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Failed to extract text' }, { status: 500 });
   }
 }
