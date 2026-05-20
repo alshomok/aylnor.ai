@@ -14,6 +14,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   ChevronDown,
+  MessageSquare,
 } from 'lucide-react';
 import { BotMode, Message, Conversation } from './ChatPageClient';
 import CodeDisplayPanel from './CodeDisplayPanel';
