@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseServer } from '@/lib/supabase';
 import { generateAIResponseStream, BotMode, ChatMessage } from '@/lib/ai-service';
+import { findBestMatch } from '@/lib/matching-algorithm';
 
 const DAILY_TOKEN_LIMITS: Record<BotMode, number> = {
   quick: Infinity,
@@ -175,13 +176,47 @@ export async function POST(request: NextRequest) {
     try {
       const { data: knowledgeFiles, error: knowledgeError } = await supabase
         .from('knowledge_base')
-        .select('id, filename, file_type, file_url, description, extracted_text')
+        .select('id, filename, file_type, file_url, description, extracted_text, created_at')
         .order('created_at', { ascending: false });
 
       if (!knowledgeError && knowledgeFiles && knowledgeFiles.length > 0) {
         // Check if user is requesting a specific file
-        const fileRequestKeywords = ['شيت', 'ملف', 'pdf', 'تحميل', 'أريد', 'نبي', 'أعطني'];
+        const fileRequestKeywords = ['شيت', 'ملف', 'pdf', 'تحميل', 'أريد', 'نبي', 'أعطني', 'أرجو', 'لو سمحت', 'ممكن', 'هل يوجد'];
         isFileRequest = fileRequestKeywords.some(keyword => message.toLowerCase().includes(keyword));
+
+        // Use AI orchestration for intelligent search if it's a file request
+        if (isFileRequest) {
+          try {
+            const aiResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/ai-orchestrate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'search',
+                data: {
+                  query: message,
+                  files: knowledgeFiles,
+                },
+              }),
+            });
+
+            if (aiResponse.ok) {
+              const aiData = await aiResponse.json();
+              if (aiData.success && aiData.result?.matchedFile) {
+                foundFile = aiData.result.matchedFile;
+              }
+            }
+          } catch (error) {
+            console.warn('AI search failed, falling back to keyword search:', error);
+          }
+        }
+
+        // Fallback to keyword search if AI didn't find a match
+        if (!foundFile && isFileRequest) {
+          const bestMatch = findBestMatch(message, knowledgeFiles);
+          if (bestMatch) {
+            foundFile = bestMatch.file;
+          }
+        }
 
         // Combine all files as context
         const allFilesContext = knowledgeFiles.map((file: any) => 
@@ -189,21 +224,6 @@ export async function POST(request: NextRequest) {
         ).join('\n\n---\n\n');
         
         fileContext = `قاعدة المعرفة (جميع الملفات):\n${allFilesContext}\n\n---\nأجب على سؤال الطالب بناءً على هذه المعلومات. اشرح بأسلوب أكاديمي مبسط.`;
-        
-        // Find most relevant file for display
-        const userWords = message.toLowerCase().split(/\s+/).filter((word: string) => word.length > 2);
-        const relevantFiles = knowledgeFiles.filter((file: any) => {
-          const filenameLower = file.filename.toLowerCase();
-          const descriptionLower = (file.description || '').toLowerCase();
-          const textLower = file.extracted_text.toLowerCase();
-          return userWords.some((word: string) => 
-            filenameLower.includes(word) || descriptionLower.includes(word) || textLower.includes(word)
-          );
-        });
-
-        if (relevantFiles.length > 0) {
-          foundFile = relevantFiles[0];
-        }
       }
     } catch (error) {
       console.warn('Knowledge base load error:', error);

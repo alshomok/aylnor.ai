@@ -161,7 +161,32 @@ export default function AdminPage() {
 
       setUploadProgress(85);
 
-      // Step 4: Save metadata to database via API
+      // Step 4: Generate smart description using AI
+      let smartDescription = description;
+      try {
+        const aiResponse = await fetch('/api/ai-orchestrate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'describe',
+            data: {
+              filename: file.name,
+              extractedText: extractData.extractedText,
+            },
+          }),
+        });
+
+        if (aiResponse.ok) {
+          const aiData = await aiResponse.json();
+          if (aiData.success && aiData.result?.description) {
+            smartDescription = aiData.result.description;
+          }
+        }
+      } catch (error) {
+        console.warn('AI description generation failed, using manual description:', error);
+      }
+
+      // Step 5: Save metadata to database via API
       const saveResponse = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -170,7 +195,7 @@ export default function AdminPage() {
           file_type: file.type,
           file_url: urlData.publicUrl,
           extracted_text: extractData.extractedText,
-          description,
+          description: smartDescription,
           source: 'upload',
         }),
       });
