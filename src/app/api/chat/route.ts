@@ -173,6 +173,8 @@ export async function POST(request: NextRequest) {
     let fileContext = '';
     let foundFile: any = null;
     let isFileRequest = false;
+    let educationalFile: any = null;
+    
     try {
       const { data: knowledgeFiles, error: knowledgeError } = await supabase
         .from('knowledge_base')
@@ -227,6 +229,25 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       console.warn('Knowledge base load error:', error);
+    }
+
+    // Step 1.5: Search educational_files table for Google Drive files
+    try {
+      const { data: educationalFiles, error: educationalError } = await supabase
+        .from('educational_files')
+        .select('*')
+        .ilike('description', `%${message}%`);
+
+      if (!educationalError && educationalFiles && educationalFiles.length > 0) {
+        // Get the first matching file
+        educationalFile = educationalFiles[0];
+        const downloadLink = `https://drive.google.com/uc?export=download&id=${educationalFile.drive_id}`;
+        
+        // Add to context
+        fileContext += `\n\n---\nملف تعليمي من Google Drive:\nالعنوان: ${educationalFile.title}\nالوصف: ${educationalFile.description || 'لا يوجد وصف'}\nرابط التحميل: ${downloadLink}\n---`;
+      }
+    } catch (error) {
+      console.warn('Educational files search error:', error);
     }
 
     // Step 2: If no files in knowledge base, try web search
