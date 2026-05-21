@@ -319,7 +319,7 @@ export default function ChatMain({
   const renderMessageContent = (content: string) => {
     // Convert Google Drive links to download buttons
     const driveLinkRegex = /\[([^\]]+)\]\(https:\/\/drive\.google\.com\/uc\?export=download&id=([a-zA-Z0-9_-]+)\)/g;
-    const parts: (string | JSX.Element)[] = [];
+    const parts: (string | React.ReactNode)[] = [];
     let lastIndex = 0;
     let match;
 
@@ -338,8 +338,6 @@ export default function ChatMain({
         <a
           key={`drive-btn-${match.index}`}
           href={downloadUrl}
-          target="_blank"
-          rel="noopener noreferrer"
           className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-royal-blue hover:bg-royal-blue/80 text-white rounded-lg text-sm font-semibold transition-colors"
         >
           <Download size={16} />
