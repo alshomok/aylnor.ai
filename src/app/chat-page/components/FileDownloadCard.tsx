@@ -80,8 +80,6 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
         <a
           href={downloadUrl}
           download
-          target="_blank"
-          rel="noopener noreferrer"
           className="flex items-center justify-center p-2 rounded-lg bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 shadow-sm transition-colors group"
           title="تحميل الشيت مباشرة"
         >
