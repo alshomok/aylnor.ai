@@ -272,11 +272,53 @@ export async function POST(request: NextRequest) {
         console.log('Search error:', educationalError);
 
         if (!educationalError && educationalFiles && educationalFiles.length > 0) {
-          // Get the first matching file
-          educationalFile = educationalFiles[0];
+          // Score each file based on match quality
+          const scoredFiles = educationalFiles.map(file => {
+            let score = 0;
+            const titleLower = file.title.toLowerCase();
+            const descLower = (file.description || '').toLowerCase();
+            const messageLower = message.toLowerCase();
+
+            // Exact match in title gets highest score
+            if (titleLower.includes(messageLower)) {
+              score += 100;
+            }
+
+            // Match each search term
+            searchTerms.forEach((term: string) => {
+              const termLower = term.toLowerCase();
+              if (titleLower.includes(termLower)) {
+                score += 20; // Match in title
+              }
+              if (descLower.includes(termLower)) {
+                score += 10; // Match in description
+              }
+            });
+
+            // Bonus for "شيت" match in title
+            if (message.includes('شيت') && titleLower.includes('شيت')) {
+              score += 30;
+            }
+
+            // Bonus for "مذكرة" match in title
+            if (message.includes('مذكرة') && titleLower.includes('مذكرة')) {
+              score += 30;
+            }
+
+            console.log(`File "${file.title}" score: ${score}`);
+            return { file, score };
+          });
+
+          // Sort by score (highest first)
+          scoredFiles.sort((a, b) => b.score - a.score);
+
+          // Get the best matching file
+          const bestMatch = scoredFiles[0];
+          educationalFile = bestMatch.file;
           const downloadLink = `https://drive.google.com/uc?export=download&id=${educationalFile.drive_id}`;
           
-          console.log('Found file:', educationalFile.title);
+          console.log('Best match file:', educationalFile.title);
+          console.log('Best match score:', bestMatch.score);
           console.log('Download link:', downloadLink);
           
           // Add to context with CRITICAL instruction to provide download link
