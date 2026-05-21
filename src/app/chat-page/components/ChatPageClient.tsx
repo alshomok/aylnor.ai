@@ -62,7 +62,13 @@ export default function ChatPageClient() {
   useEffect(() => {
     console.log('User ID changed:', user?.id);
     if (user?.id) {
-      loadConversations();
+      // Restore last active conversation from localStorage
+      const savedConvId = localStorage.getItem(`lastConvId_${user.id}`) || undefined;
+      if (savedConvId) {
+        console.log('Restoring last conversation:', savedConvId);
+        setActiveConvId(savedConvId);
+      }
+      loadConversations(savedConvId);
     } else {
       // Clear local state when user logs out
       console.log('User logged out, clearing conversations');
@@ -73,7 +79,7 @@ export default function ChatPageClient() {
     }
   }, [user?.id]);
 
-  const loadConversations = async () => {
+  const loadConversations = async (savedConvId?: string) => {
     if (!user?.id) {
       console.warn('No user ID available');
       setIsLoading(false);
@@ -88,8 +94,12 @@ export default function ChatPageClient() {
         console.log('Conversations loaded:', data.conversations?.length || 0);
         if (data.conversations && data.conversations.length > 0) {
           setConversations(data.conversations);
-          setActiveConvId(data.conversations[0].id);
-          loadMessages(data.conversations[0].id);
+          // Use saved conversation ID if provided and exists in list
+          const targetConvId = savedConvId && data.conversations.some((c: Conversation) => c.id === savedConvId)
+            ? savedConvId
+            : data.conversations[0].id;
+          setActiveConvId(targetConvId);
+          loadMessages(targetConvId);
         } else {
           console.log('No conversations found, creating new one');
           // Create initial conversation if none exists
@@ -180,6 +190,10 @@ export default function ChatPageClient() {
       };
       setConversations([newConv]);
       setActiveConvId(conversationId);
+      // Save to localStorage for persistence
+      if (user?.id) {
+        localStorage.setItem(`lastConvId_${user.id}`, conversationId);
+      }
       setMessages([]);
       console.debug('Conversation created successfully:', conversationId);
       return conversationId;
@@ -204,6 +218,10 @@ export default function ChatPageClient() {
 
   const handleSelectConversation = (conversationId: string) => {
     setActiveConvId(conversationId);
+    // Save to localStorage for persistence
+    if (user?.id) {
+      localStorage.setItem(`lastConvId_${user.id}`, conversationId);
+    }
     loadMessages(conversationId);
   };
 
