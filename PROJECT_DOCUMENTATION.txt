@@ -1,0 +1,251 @@
+========================================
+توثيق مشروع AYLNOR.AI
+========================================
+
+نظرة عامة
+----------
+AYLNOR.AI هو نظام ذكاء اصطناعي لإدارة قاعدة المعرفة للطلاب، يتيح لهم رفع الملفات والبحث عنها والحصول على إجابات أكاديمية.
+
+تاريخ بداية المشروع: 16 مارس 2026
+
+========================================
+
+التاريخ والتحديثات
+-------------------
+
+21 مايو 2026
+- إصلاح مشكلة الـ Stream الفارغ: البوت كان يرد برسائل فارغة في جميع الأوضاع (سريع، مفكر، مبرمج)
+- السبب: مفاتيح AI غير مكونة بشكل صحيح في Environment Variables
+- الحل: 
+  - تعديل ترتيب المفاتيح في ai-key-rotation.ts لاستخدام Groq أولاً في جميع الأوضاع
+  - إضافة مفاتيح Groq و Gemini المطلوبة في Vercel Environment Variables
+  - إضافة logging شامل لتتبع قراءة المفاتيح
+
+- إصلاح مشكلة انفصال METADATA عن JSON في الـ Stream:
+  - دمج إرسال METADATA في سطر واحد في السيرفر لضمان خروجهما معاً
+  - إضافة metadataReceived flag في العميل لمنع إضافة بيانات زائدة بعد استلام الميتاداتا
+
+- تحديث BASE_PROMPT: 
+  - تبسيط الـ prompt ليكون أكثر ودية واحترافية
+  - إضافة سياق لتحديد نوع الرد (عام أو تقني)
+  - إضافة هوية الخالق (الطالب المهندس أحمد قريز)
+  - دعم 20+ لغة برمجة
+
+- تصحيح أخطاء في route.ts:
+  - إضافة backticks للنصوص العربية
+  - إصلاح template literals
+  - تحسين معالجة الأخطاء
+
+========================================
+
+المشاكل التي واجهتنا وحلولها
+-------------------------------
+
+1. البوت يرد برسائل فارغة
+المشكلة: جميع الأوضاع (سريع، مفكر، مبرمج) تُرجع رسائل فارغة
+
+الأسباب المحتملة:
+- مفاتيح AI غير مكونة في Environment Variables
+- ترتيب المفاتيح يبدأ بـ Gemini بينما مفاتيح Groq فقط متوفرة
+- API keys placeholder وليست مفاتيح فعلية
+
+الحل:
+1. تعديل ai-key-rotation.ts:
+   const MODE_ROTATION_PRIORITIES: Record<BotMode, AIModel[]> = {
+     quick: ['model-3', 'model-4', 'model-2', 'model-1'],
+     thoughtful: ['model-3', 'model-4', 'model-2', 'model-1'],
+     programming: ['model-3', 'model-4', 'model-2', 'model-1'],
+   };
+
+2. إضافة المفاتيح في Vercel Environment Variables:
+   - GROQ_API_KEY_1
+   - GROQ_API_KEY_2
+   - GEMINI_API_KEY_1
+   - GEMINI_API_KEY_2
+
+3. إضافة logging لتتبع حالة المفاتيح
+
+2. انفصال METADATA عن JSON في الـ Stream
+المشكلة: الـ metadata يُرسل في chunk منفصل عن JSON، مما يسبب مشاكل في التحليل
+
+الحل في السيرفر (route.ts):
+// دمج في سطر واحد
+controller.enqueue(
+  encoder.encode(
+    '\n\n__METADATA__' + JSON.stringify({
+      mode,
+      codeBlock,
+      fileCard: (isFileRequest && foundFile) ? { ... } : null,
+      source,
+    })
+  )
+);
+
+الحل في العميل (ChatMain.tsx):
+let metadataReceived = false;
+
+// بعد استلام الميتاداتا
+if (fullContent.includes('__METADATA__')) {
+  const [contentPart, metadataPart] = fullContent.split('__METADATA__');
+  fullContent = contentPart;
+  try {
+    metadata = JSON.parse(metadataPart.trim());
+    metadataReceived = true;
+  } catch (e) {
+    console.error('Failed to parse metadata:', e);
+  }
+}
+
+// تخطي التحديث بعد استلام الميتاداتا
+if (metadataReceived) {
+  continue;
+}
+
+3. أخطاء في route.ts
+المشكلة: أخطاء syntax في النصوص العربية و template literals
+
+الحل:
+- إضافة backticks للنصوص العربية
+- إصلاح template literals المكسورة
+- إضافة علامات اقتباس للـ URLs
+
+========================================
+
+الأدوات والتقنيات المستخدمة
+-----------------------------
+
+Frontend
+- Next.js 14 (App Router)
+- TypeScript
+- TailwindCSS
+- Lucide React (أيقونات)
+- React (Hooks: useState, useEffect, useRef)
+
+Backend
+- Next.js API Routes
+- Supabase (قاعدة البيانات)
+- AI SDK (Vercel AI SDK)
+  - Groq (LLM provider)
+  - Google Gemini (LLM provider)
+
+AI Providers
+- Groq: llama-3.1-8b-instant, gemma2-9b-it
+- Google Gemini: gemini-1.5-flash, gemini-2.0-flash
+
+قواعد البيانات (Supabase)
+- conversations: تخزين المحادثات
+- messages: تخزين الرسائل
+- knowledge_base: تخزين الملفات المرفوعة
+- educational_files: تخزين الملفات التعليمية من Google Drive
+
+Web Search
+- Serper API (للبحث على الإنترنت)
+
+========================================
+
+هيكل المشروع
+-------------
+
+aylnor/
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── chat/
+│   │   │   │   └── route.ts          # API endpoint للشات
+│   │   │   └── ...
+│   │   ├── chat-page/
+│   │   │   └── components/
+│   │   │       ├── ChatMain.tsx       # المكون الرئيسي للشات
+│   │   │       ├── ChatPageClient.tsx # العميل
+│   │   │       └── ...
+│   │   └── ...
+│   ├── lib/
+│   │   ├── ai-service.ts             # خدمة AI
+│   │   ├── ai-key-rotation.ts         # تدوير مفاتيح AI
+│   │   ├── supabase.ts                # إعدادات Supabase
+│   │   └── ...
+│   └── ...
+├── .env                              # Environment Variables
+├── .env.example                      # مثال على Environment Variables
+└── ...
+
+========================================
+
+أوضاع البوت
+-----------
+
+1. الوضع السريع (Quick)
+- الوصف: إجابات سريعة وموجزة
+- الحد: غير محدود
+- الترتيب: model-3, model-4, model-2, model-1
+
+2. الوضع المفكر (Thoughtful)
+- الوصف: شروحات عميقة ومفصلة
+- الحد: 50 رسالة/ساعة
+- الترتيب: model-3, model-4, model-2, model-1
+
+3. الوضع المبرمج (Programming)
+- الوصف: أولوية الكود مع تمييز الصياغة
+- الحد: 50 رسالة/ساعة
+- الترتيب: model-3, model-4, model-2, model-1
+
+========================================
+
+تدوير مفاتيح AI
+----------------
+
+المفاتيح المتاحة
+- model-1: Gemini (gemini-1.5-flash)
+- model-2: Gemini (gemini-2.0-flash)
+- model-3: Groq (llama-3.1-8b-instant)
+- model-4: Groq (gemma2-9b-it)
+
+استراتيجية التدوير
+- الحد الأقصى للفشلات: 3
+- فترة التبريد: 5 دقائق
+- التدوير التلقائي عند الفشل
+
+========================================
+
+Environment Variables المطلوبة
+-------------------------------
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+
+# AI API Keys
+GEMINI_API_KEY_1=your-gemini-api-key-1
+GEMINI_API_KEY_2=your-gemini-api-key-2
+GROQ_API_KEY_1=your-groq-api-key-1
+GROQ_API_KEY_2=your-groq-api-key-2
+
+# Web Search
+SEARCH_API_KEY=your-serper-api-key
+
+# App URL
+NEXT_PUBLIC_APP_URL=https://your-domain.vercel.app
+
+========================================
+
+ملاحظات مهمة
+--------------
+
+1. مفاتيح AI: يجب إضافتها في Vercel Environment Variables وليس في .env المحلي
+2. Redeploy: بعد تعديل Environment Variables، يجب redeploy المشروع
+3. Logging: الـ logs متاحة في Vercel Dashboard لتتبع الأخطاء
+4. Sliding Window: آخر 5 رسائل فقط تُستخدم لتوفير tokens
+5. Hourly Limits: أوضاع المفكر والمبرمج محدودة بـ 50 رسالة/ساعة
+
+========================================
+
+الخالق
+------
+تم تصميم وتطوير AYLNOR.AI بواسطة: الطالب المهندس أحمد قريز
+
+========================================
+
+تاريخ التوثيق
+--------------
+آخر تحديث: 21 مايو 2026

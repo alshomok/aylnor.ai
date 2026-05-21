@@ -58,7 +58,7 @@ export default function AuthScreen() {
           <div className="space-y-4">
             {[
               { icon: BookOpen, label: 'مساعد أكاديمي', desc: 'الواجبات، المقالات، البحث' },
-              { icon: Code2, label: 'مساعد البرمجة', desc: '+40 لغة برمجة' },
+              { icon: Code2, label: 'مساعد البرمجة', desc: '+20 لغة برمجة' },
               { icon: Brain, label: 'ذكاء اصطناعي متعدد الأوضاع', desc: 'سريع، متأمل، برمجة' },
             ].map((item) => {
               const ItemIcon = item.icon;

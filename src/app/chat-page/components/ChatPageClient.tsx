@@ -32,7 +32,7 @@ export interface Conversation {
 }
 
 export default function ChatPageClient() {
-  const { user } = useAuth();
+  const { user, onAuthStateChange } = useAuth();
   const [theme, setTheme] = useState<Theme>('dark');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeMode, setActiveMode] = useState<BotMode>('thoughtful');
@@ -58,24 +58,46 @@ export default function ChatPageClient() {
     }
   }, [user]);
 
-  // Load conversations whenever user changes (login/logout)
+  // Register auth state change callback for historical data hydration
+  useEffect(() => {
+    if (onAuthStateChange) {
+      const handleAuthStateChange = (event: string, session: any) => {
+        console.log('Auth state changed:', event, 'Session:', !!session);
+        
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          if (session?.user?.id) {
+            console.log('User signed in, loading historical data');
+            // Restore last active conversation from localStorage
+            const savedConvId = localStorage.getItem(`lastConvId_${session.user.id}`) || undefined;
+            if (savedConvId) {
+              console.log('Restoring last conversation:', savedConvId);
+              setActiveConvId(savedConvId);
+            }
+            loadConversations(savedConvId);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          console.log('User signed out, clearing all local state');
+          // Clear all local state
+          setConversations([]);
+          setMessages([]);
+          setActiveConvId('');
+          setIsLoading(false);
+        }
+      };
+
+      onAuthStateChange(handleAuthStateChange);
+    }
+  }, [onAuthStateChange]);
+
+  // Load conversations whenever user changes (login/logout) - fallback for direct user changes
   useEffect(() => {
     console.log('User ID changed:', user?.id);
     if (user?.id) {
-      // Restore last active conversation from localStorage
+      // This is handled by auth state change callback, but we keep this as fallback
       const savedConvId = localStorage.getItem(`lastConvId_${user.id}`) || undefined;
-      if (savedConvId) {
-        console.log('Restoring last conversation:', savedConvId);
-        setActiveConvId(savedConvId);
+      if (!isLoading) {
+        loadConversations(savedConvId);
       }
-      loadConversations(savedConvId);
-    } else {
-      // Clear local state when user logs out but keep localStorage for persistence
-      console.log('User logged out, clearing conversations from state');
-      setConversations([]);
-      setMessages([]);
-      setActiveConvId('');
-      setIsLoading(false);
     }
   }, [user?.id]);
 

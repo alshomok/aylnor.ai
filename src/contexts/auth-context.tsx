@@ -1,5 +1,5 @@
 'use client';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -11,6 +11,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   checkIpLogin: () => Promise<boolean>;
+  onAuthStateChange: (callback: (event: string, session: Session | null) => void) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,6 +20,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const authStateChangeCallbackRef = useRef<((event: string, session: Session | null) => void) | undefined>(undefined);
 
   useEffect(() => {
     // Get initial session
@@ -27,15 +29,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        // Trigger callback for initial session
+        if (authStateChangeCallbackRef.current) {
+          authStateChangeCallbackRef.current('INITIAL_SESSION', session);
+        }
       });
 
       // Listen for auth changes
       const {
         data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
+      } = supabase.auth.onAuthStateChange((event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        // Trigger callback for auth state changes
+        if (authStateChangeCallbackRef.current) {
+          authStateChangeCallbackRef.current(event, session);
+        }
       });
 
       return () => subscription.unsubscribe();
@@ -101,6 +111,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
 
+      if (!supabase) {
+        return false;
+      }
+
       const { data: userData, error } = await supabase
         .from('users')
         .select('email')
@@ -122,12 +136,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     if (supabase) {
+      // Clear all localStorage items related to the current user
+      if (user?.id) {
+        localStorage.removeItem(`lastConvId_${user.id}`);
+      }
+      
+      // Clear all app-specific localStorage items to prevent data leaks
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('lastConvId_') || key === 'theme' || key === 'sidebarOpen')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
       await supabase.auth.signOut();
     }
   };
 
+  const setAuthStateChangeCallback = (callback: (event: string, session: Session | null) => void) => {
+    authStateChangeCallbackRef.current = callback;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, checkIpLogin }}>
+    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, checkIpLogin, onAuthStateChange: setAuthStateChangeCallback }}>
       {children}
     </AuthContext.Provider>
   );
