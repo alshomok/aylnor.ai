@@ -26,9 +26,9 @@ const MODE_ROTATION_PRIORITIES: Record<BotMode, AIModel[]> = {
 };
 
 const MODE_TOKEN_LIMITS: Record<BotMode, number | null> = {
-  quick: null,
-  thoughtful: 1200,
-  programming: 1500,
+  quick: 2048,
+  thoughtful: 4096,
+  programming: 4096,
 };
 
 const MODE_TEMPERATURES: Record<BotMode, number> = {

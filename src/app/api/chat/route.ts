@@ -3,72 +3,59 @@ import { supabase, supabaseServer } from '@/lib/supabase';
 import { generateAIResponseStream, BotMode, ChatMessage } from '@/lib/ai-service';
 import { findBestMatch } from '@/lib/matching-algorithm';
 
-const DAILY_TOKEN_LIMITS: Record<BotMode, number> = {
+const HOURLY_REQUEST_LIMITS: Record<BotMode, number> = {
   quick: Infinity,
-  thoughtful: 400000,
-  programming: 400000,
+  thoughtful: 20,
+  programming: 15,
 };
 
-async function checkTokenBudget(userId: string, mode: BotMode): Promise<boolean> {
+async function checkHourlyRequestLimit(userId: string, mode: BotMode): Promise<{ allowed: boolean; remainingMinutes?: number }> {
   const server = supabaseServer();
-  if (!server) return true;
+  if (!server) return { allowed: true };
 
-  const limit = DAILY_TOKEN_LIMITS[mode];
-  if (limit === Infinity) return true;
+  const limit = HOURLY_REQUEST_LIMITS[mode];
+  if (limit === Infinity) return { allowed: true };
 
-  const today = new Date().toISOString().split('T')[0];
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
-  const { data, error } = await server
-    .from('token_usage')
-    .select('tokens_used')
+  const { count, error } = await server
+    .from('messages')
+    .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('mode', mode)
-    .eq('date', today);
+    .eq('role', 'user')
+    .gte('created_at', oneHourAgo);
 
   if (error) {
-    console.error('Error checking token budget:', error);
-    return true; // Allow on error to not block users
+    console.error('Error checking hourly limit:', error);
+    return { allowed: true }; // Allow on error
   }
 
-  const totalUsed = data?.reduce((sum, record) => sum + record.tokens_used, 0) || 0;
-  return totalUsed < limit;
-}
+  const requestCount = count || 0;
+  if (requestCount >= limit) {
+    // Calculate remaining time until limit resets
+    const oldestRequest = await server
+      .from('messages')
+      .select('created_at')
+      .eq('user_id', userId)
+      .eq('mode', mode)
+      .eq('role', 'user')
+      .gte('created_at', oneHourAgo)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
 
-async function trackTokenUsage(userId: string, mode: BotMode, tokensUsed: number): Promise<void> {
-  const server = supabaseServer();
-  if (!server) return;
+    let remainingMinutes = 60;
+    if (oldestRequest?.data?.created_at) {
+      const oldestTime = new Date(oldestRequest.data.created_at).getTime();
+      const elapsedTime = Date.now() - oldestTime;
+      remainingMinutes = Math.max(0, Math.ceil((60 * 60 * 1000 - elapsedTime) / (60 * 1000)));
+    }
 
-  const limit = DAILY_TOKEN_LIMITS[mode];
-  if (limit === Infinity) return; // Don't track unlimited mode
-
-  const today = new Date().toISOString().split('T')[0];
-
-  // Check if record exists for today
-  const { data: existingRecord } = await server
-    .from('token_usage')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('mode', mode)
-    .eq('date', today)
-    .single();
-
-  if (existingRecord) {
-    // Update existing record
-    await server
-      .from('token_usage')
-      .update({ tokens_used: existingRecord.tokens_used + tokensUsed })
-      .eq('id', existingRecord.id);
-  } else {
-    // Create new record
-    await server
-      .from('token_usage')
-      .insert({
-        user_id: userId,
-        mode,
-        tokens_used: tokensUsed,
-        date: today,
-      });
+    return { allowed: false, remainingMinutes };
   }
+
+  return { allowed: true };
 }
 
 async function performWebSearch(query: string): Promise<string> {
@@ -133,12 +120,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Supabase server client not initialized' }, { status: 500 });
     }
 
-    // Check token budget for non-quick modes
+    // Check hourly request limit for non-quick modes
     if (userId && mode !== 'quick') {
-      const hasBudget = await checkTokenBudget(userId, mode as BotMode);
-      if (!hasBudget) {
+      const { allowed, remainingMinutes } = await checkHourlyRequestLimit(userId, mode as BotMode);
+      if (!allowed) {
+        const modeNames = {
+          thoughtful: 'المفكر',
+          programming: 'المبرمج',
+        };
+        const modeName = modeNames[mode as keyof typeof modeNames] || mode;
         return NextResponse.json(
-          { error: 'Daily token limit exceeded for this mode. Please try again tomorrow or use quick mode.' },
+          { error: `لقد وصلت للحد الأقصى لاستخدام وضع ${modeName} المتقدم لهذه الساعة. يمكنك استخدام الوضع السريع حالياً، أو الانتظار حتى ينتهي وقت الحظر بعد ${remainingMinutes} دقيقة.` },
           { status: 429 }
         );
       }
@@ -163,11 +155,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build chat history
+    // Build chat history with sliding window (last 5 messages only)
     const chatHistory: ChatMessage[] = messages.map((msg: any) => ({
       role: msg.role === 'bot' ? 'assistant' : 'user',
       content: msg.content,
     }));
+
+    // Apply sliding window: keep only last 5 messages for token optimization
+    const optimizedChatHistory = chatHistory.slice(-5);
 
     // Step 1: Load all knowledge base files as context
     let fileContext = '';
@@ -238,21 +233,56 @@ export async function POST(request: NextRequest) {
       message.toLowerCase().includes(keyword)
     );
 
+    console.log('=== File Search Debug ===');
+    console.log('User message:', message);
+    console.log('Is file request:', isEducationalFileRequest);
+    console.log('Detected keywords:', fileRequestKeywords.filter(k => message.toLowerCase().includes(k)));
+
     if (isEducationalFileRequest) {
       try {
-        // Search both title and description for better matching
+        // Extract key terms from the message for better matching
+        const searchTerms = message
+          .replace(/نبي|أريد|أرجو|ممكن|هل يوجد|شيت|ملف|مذكرة|منهج|تحميل/gi, '')
+          .trim()
+          .split(/\s+/)
+          .filter(term => term.length > 2);
+
+        console.log('Extracted search terms:', searchTerms);
+
+        // Build search query with relaxed terms
+        let searchQuery = '';
+        if (searchTerms.length > 0) {
+          const termConditions = searchTerms.map(term => 
+            `title.ilike.%${term}%,description.ilike.%${term}%`
+          );
+          searchQuery = termConditions.join(',');
+        } else {
+          // Fallback to full message search if no terms extracted
+          searchQuery = `title.ilike.%${message}%,description.ilike.%${message}%`;
+        }
+
+        console.log('Search query:', searchQuery);
+
         const { data: educationalFiles, error: educationalError } = await supabase
           .from('educational_files')
           .select('*')
-          .or(`title.ilike.%${message}%,description.ilike.%${message}%`);
+          .or(searchQuery);
+
+        console.log('Fetched Files from DB:', educationalFiles);
+        console.log('Search error:', educationalError);
 
         if (!educationalError && educationalFiles && educationalFiles.length > 0) {
           // Get the first matching file
           educationalFile = educationalFiles[0];
           const downloadLink = `https://drive.google.com/uc?export=download&id=${educationalFile.drive_id}`;
           
-          // Add to context with explicit instruction to provide download link
-          fileContext += `\n\n---\n🎯 ملف تعليمي مطابق من Google Drive:\nالعنوان: ${educationalFile.title}\nالوصف: ${educationalFile.description || 'لا يوجد وصف'}\n\n📥 رابط التحميل المباشر: ${downloadLink}\n\n⚠️ تعليمات هامة: يجب عليك تقديم هذا الرابط للطالب في شكل زر أو رابط واضح في Markdown. لا تشرح الموضوع فقط، بل قدم الملف للطالب.\n---`;
+          console.log('Found file:', educationalFile.title);
+          console.log('Download link:', downloadLink);
+          
+          // Add to context with CRITICAL instruction to provide download link
+          fileContext += `\n\n---\n🎯 ملف تعليمي مطابق من Google Drive:\nالعنوان: ${educationalFile.title}\nالوصف: ${educationalFile.description || 'لا يوجد وصف'}\n\n📥 رابط التحميل المباشر: ${downloadLink}\n\n⚠️ CRITICAL: The user is asking for a specific file. We found it in the database. You MUST provide the download link immediately in markdown format: [${educationalFile.title}](${downloadLink}). DO NOT generate any Python code or generic explanations unless specifically asked. Just provide the download link.\n---`;
+        } else {
+          console.log('No files found in database');
         }
       } catch (error) {
         console.warn('Educational files search error:', error);
@@ -283,13 +313,13 @@ ${searchResults}
       finalMessage = `${webSearchContext}\n\nسؤال الطالب: ${message}`;
     }
 
-    chatHistory.push({
+    optimizedChatHistory.push({
       role: 'user',
       content: finalMessage,
     });
 
-    // Generate AI response with streaming
-    const stream = await generateAIResponseStream(chatHistory, mode as BotMode, botPersonality);
+    // Generate AI response with streaming using optimized chat history
+    const stream = await generateAIResponseStream(optimizedChatHistory, mode as BotMode, botPersonality);
 
     // Save user message to Supabase (skip if local conversation)
     if (!isLocalConversation) {
@@ -341,12 +371,6 @@ ${searchResults}
             formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${fullContent}`;
           } else if (source === 'web') {
             formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${fullContent}`;
-          }
-
-          // Track token usage (estimate based on message length)
-          if (userId && mode !== 'quick') {
-            const estimatedTokens = message.length / 4 + fullContent.length / 4;
-            await trackTokenUsage(userId, mode as BotMode, Math.floor(estimatedTokens));
           }
 
           // Save bot response to Supabase (skip if local conversation)

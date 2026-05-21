@@ -151,12 +151,14 @@ export async function generateAIResponse(
 
     // Get mode-specific settings
     const temperature = aiKeyRotationService.getTemperature(mode);
+    const maxTokens = aiKeyRotationService.getTokenLimit(mode);
 
     // Generate response
     const response = await generateText({
       model,
       messages: apiMessages,
       temperature,
+      ...(maxTokens && { maxGenerationTokens: maxTokens }),
     });
 
     // Report success
@@ -222,12 +224,14 @@ export async function generateAIResponseStream(
 
     // Get mode-specific settings
     const temperature = aiKeyRotationService.getTemperature(mode);
+    const maxTokens = aiKeyRotationService.getTokenLimit(mode);
 
     // Generate streaming response
     const result = streamText({
       model,
       messages: apiMessages,
       temperature,
+      ...(maxTokens && { maxGenerationTokens: maxTokens }),
     });
 
     // Report success
