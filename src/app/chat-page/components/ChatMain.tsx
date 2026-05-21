@@ -253,12 +253,8 @@ export default function ChatMain({
           }
         }
 
-        // Skip updating message content if metadata has been received
-        if (metadataReceived) {
-          continue;
-        }
-
-        // Update message content
+        // Always update message content with the current fullContent (excluding metadata)
+        // This ensures content is displayed even if metadata arrives early
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === botMsg.id ? { ...msg, content: fullContent } : msg

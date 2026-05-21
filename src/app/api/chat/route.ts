@@ -380,9 +380,16 @@ ${searchResults}
     console.log('Mode:', mode);
     console.log('Bot personality:', botPersonality);
 
-    const stream = await generateAIResponseStream(optimizedChatHistory, mode as BotMode, botPersonality);
-
-    console.log('Stream generated successfully');
+    let stream;
+    try {
+      stream = await generateAIResponseStream(optimizedChatHistory, mode as BotMode, botPersonality);
+      console.log('Stream generated successfully');
+      console.log('Stream object:', stream);
+      console.log('Stream has textStream:', 'textStream' in stream);
+    } catch (error) {
+      console.error('ERROR: Failed to generate AI stream:', error);
+      throw error;
+    }
 
     // Save user message to Supabase (skip if local conversation)
     if (!isLocalConversation) {
@@ -414,17 +421,26 @@ ${searchResults}
       async start(controller) {
         try {
           console.log('=== Starting Stream ===');
+          
+          let hasChunks = false;
           for await (const chunk of stream.textStream) {
+            hasChunks = true;
             chunkCount++;
             fullContent += chunk;
             console.log(`Chunk ${chunkCount}:`, chunk.length, 'chars');
             controller.enqueue(encoder.encode(chunk));
           }
 
+          if (!hasChunks) {
+            console.error('ERROR: Stream produced zero chunks');
+            const errorMessage = 'عذراً، حدث خطأ في الاتصال بخدمة الذكاء الاصطناعي. لم يتم استلام أي رد.';
+            controller.enqueue(encoder.encode(errorMessage));
+            fullContent = errorMessage;
+          }
+
           console.log('=== Stream Ended ===');
           console.log('Total chunks:', chunkCount);
           console.log('Full content length:', fullContent.length);
-          console.log('Full content:', fullContent);
 
           // Extract code block from full content
           const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
@@ -493,7 +509,12 @@ ${searchResults}
           controller.close();
         } catch (error) {
           console.error('Streaming error:', error);
-          controller.error(error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          console.error('Error details:', errorMessage);
+          
+          // Stream error message to UI instead of failing silently
+          controller.enqueue(encoder.encode(`\n\nعذراً، حدث خطأ: ${errorMessage}`));
+          controller.close();
         }
       },
     });
@@ -501,6 +522,8 @@ ${searchResults}
     return new Response(readableStream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
         'Transfer-Encoding': 'chunked',
       },
     });
