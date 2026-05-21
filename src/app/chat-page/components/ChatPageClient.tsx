@@ -60,10 +60,12 @@ export default function ChatPageClient() {
 
   // Load conversations whenever user changes (login/logout)
   useEffect(() => {
+    console.log('User ID changed:', user?.id);
     if (user?.id) {
       loadConversations();
     } else {
       // Clear local state when user logs out
+      console.log('User logged out, clearing conversations');
       setConversations([]);
       setMessages([]);
       setActiveConvId('');
@@ -78,19 +80,23 @@ export default function ChatPageClient() {
       return;
     }
 
+    console.log('Loading conversations for user:', user.id);
     try {
       const response = await fetch(`/api/conversations?userId=${user.id}`);
       if (response.ok) {
         const data = await response.json();
+        console.log('Conversations loaded:', data.conversations?.length || 0);
         if (data.conversations && data.conversations.length > 0) {
           setConversations(data.conversations);
           setActiveConvId(data.conversations[0].id);
           loadMessages(data.conversations[0].id);
         } else {
+          console.log('No conversations found, creating new one');
           // Create initial conversation if none exists
           createNewConversation();
         }
       } else {
+        console.error('Failed to load conversations, status:', response.status);
         // Fallback to local state if API fails
         createNewConversation();
       }

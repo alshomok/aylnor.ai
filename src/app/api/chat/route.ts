@@ -245,14 +245,14 @@ export async function POST(request: NextRequest) {
           .replace(/نبي|أريد|أرجو|ممكن|هل يوجد|شيت|ملف|مذكرة|منهج|تحميل/gi, '')
           .trim()
           .split(/\s+/)
-          .filter(term => term.length > 2);
+          .filter((term: string) => term.length > 2);
 
         console.log('Extracted search terms:', searchTerms);
 
         // Build search query with relaxed terms
         let searchQuery = '';
         if (searchTerms.length > 0) {
-          const termConditions = searchTerms.map(term => 
+          const termConditions = searchTerms.map((term: string) => 
             `title.ilike.%${term}%,description.ilike.%${term}%`
           );
           searchQuery = termConditions.join(',');
@@ -280,7 +280,7 @@ export async function POST(request: NextRequest) {
           console.log('Download link:', downloadLink);
           
           // Add to context with CRITICAL instruction to provide download link
-          fileContext += `\n\n---\n🎯 ملف تعليمي مطابق من Google Drive:\nالعنوان: ${educationalFile.title}\nالوصف: ${educationalFile.description || 'لا يوجد وصف'}\n\n📥 رابط التحميل المباشر: ${downloadLink}\n\n⚠️ CRITICAL: The user is asking for a specific file. We found it in the database. You MUST provide the download link immediately in markdown format: [${educationalFile.title}](${downloadLink}). DO NOT generate any Python code or generic explanations unless specifically asked. Just provide the download link.\n---`;
+          fileContext += `\n\n---\n🎯 ملف تعليمي مطابق من Google Drive:\nالعنوان: ${educationalFile.title}\nالوصف: ${educationalFile.description || 'لا يوجد وصف'}\n\n📥 رابط التحميل المباشر: ${downloadLink}\n\n⚠️ تعليمات حرجة: الطالب يطلب ملفاً محدداً وجدناه في قاعدة البيانات. يجب عليك تقديم رابط التحميل فوراً بصيغة Markdown: [${educationalFile.title}](${downloadLink}). لا تشرح الموضوع ولا تولد أي كود أو شروحات عامة إلا إذا طلب الطالب ذلك صراحة. الأولوية القصوى هي تقديم رابط التحميل.\n---`;
         } else {
           console.log('No files found in database');
         }
