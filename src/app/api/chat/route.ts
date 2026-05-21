@@ -374,7 +374,15 @@ ${searchResults}
     });
 
     // Generate AI response with streaming using optimized chat history
+    console.log('=== Generating AI Response ===');
+    console.log('Optimized chat history length:', optimizedChatHistory.length);
+    console.log('Final message length:', finalMessage.length);
+    console.log('Mode:', mode);
+    console.log('Bot personality:', botPersonality);
+
     const stream = await generateAIResponseStream(optimizedChatHistory, mode as BotMode, botPersonality);
+
+    console.log('Stream generated successfully');
 
     // Save user message to Supabase (skip if local conversation)
     if (!isLocalConversation) {
@@ -396,6 +404,7 @@ ${searchResults}
     let codeBlock: { language: string; code: string } | undefined = undefined;
     let provider = '';
     let model = '';
+    let chunkCount = 0;
 
     // Create a readable stream
     const encoder = new TextEncoder();
@@ -404,10 +413,18 @@ ${searchResults}
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
+          console.log('=== Starting Stream ===');
           for await (const chunk of stream.textStream) {
+            chunkCount++;
             fullContent += chunk;
+            console.log(`Chunk ${chunkCount}:`, chunk.length, 'chars');
             controller.enqueue(encoder.encode(chunk));
           }
+
+          console.log('=== Stream Ended ===');
+          console.log('Total chunks:', chunkCount);
+          console.log('Full content length:', fullContent.length);
+          console.log('Full content:', fullContent);
 
           // Extract code block from full content
           const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
@@ -455,11 +472,10 @@ ${searchResults}
             }
           }
 
-          // Send final metadata
-          controller.enqueue(encoder.encode('\n\n__METADATA__'));
+          // Send final metadata in a single chunk to prevent separation
           controller.enqueue(
             encoder.encode(
-              JSON.stringify({
+              '\n\n__METADATA__' + JSON.stringify({
                 mode,
                 codeBlock,
                 fileCard: (isFileRequest && foundFile) ? {

@@ -195,6 +195,8 @@ export async function generateAIResponseStream(
   console.log('Mode:', mode);
   console.log('Key config:', keyConfig);
   console.log('Key status:', aiKeyRotationService.getKeyStatus());
+  console.log('Messages count:', messages.length);
+  console.log('Bot personality:', botPersonality);
 
   if (!keyConfig) {
     throw new Error(
@@ -209,6 +211,9 @@ export async function generateAIResponseStream(
       : MODE_SYSTEM_PROMPTS[mode];
 
     const apiMessages = [{ role: 'system' as const, content: systemPrompt }, ...messages];
+
+    console.log('API messages prepared:', apiMessages.length);
+    console.log('System prompt length:', systemPrompt.length);
 
     // Select AI provider based on key config
     let model;
@@ -227,9 +232,15 @@ export async function generateAIResponseStream(
       process.env.GROQ_API_KEY = keyConfig.apiKey;
     }
 
+    console.log('Model selected:', keyConfig.model);
+    console.log('Provider:', keyConfig.provider);
+
     // Get mode-specific settings
     const temperature = aiKeyRotationService.getTemperature(mode);
     const maxTokens = aiKeyRotationService.getTokenLimit(mode);
+
+    console.log('Temperature:', temperature);
+    console.log('Max tokens:', maxTokens);
 
     // Generate streaming response
     const result = streamText({

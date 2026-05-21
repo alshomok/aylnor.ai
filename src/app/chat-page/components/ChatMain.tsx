@@ -217,6 +217,7 @@ export default function ChatMain({
       const decoder = new TextDecoder();
       let fullContent = '';
       let metadata = null;
+      let metadataReceived = false;
 
       if (!reader) {
         throw new Error('No response body');
@@ -246,9 +247,15 @@ export default function ChatMain({
           fullContent = contentPart;
           try {
             metadata = JSON.parse(metadataPart.trim());
+            metadataReceived = true;
           } catch (e) {
             console.error('Failed to parse metadata:', e);
           }
+        }
+
+        // Skip updating message content if metadata has been received
+        if (metadataReceived) {
+          continue;
         }
 
         // Update message content
