@@ -191,6 +191,11 @@ export async function generateAIResponseStream(
 ) {
   const keyConfig = aiKeyRotationService.getNextAvailableKey(mode);
 
+  console.log('=== AI Service Debug ===');
+  console.log('Mode:', mode);
+  console.log('Key config:', keyConfig);
+  console.log('Key status:', aiKeyRotationService.getKeyStatus());
+
   if (!keyConfig) {
     throw new Error(
       'No AI keys are currently available. All keys may be in cooldown or not configured.'
@@ -241,6 +246,16 @@ export async function generateAIResponseStream(
   } catch (error) {
     // Report failure and rotate to next key
     aiKeyRotationService.reportKeyFailure(keyConfig.id, mode, error as Error);
+
+    console.error('AI API Error:', error);
+
+    // Check if all keys failed
+    const keyStatus = aiKeyRotationService.getKeyStatus();
+    const allKeysFailed = Object.values(keyStatus).every(k => !k.isActive || k.failureCount >= 3);
+
+    if (allKeysFailed) {
+      throw new Error('جميع مفاتيح AI غير صالحة أو غير مكونة. يرجى إضافة مفاتيح AI فعلية في ملف .env');
+    }
 
     // Retry with next available key
     console.log(`Key ${keyConfig.id} failed, retrying with next available key...`);

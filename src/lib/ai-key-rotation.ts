@@ -21,8 +21,8 @@ const MODEL_CONFIGS: Record<AIModel, { provider: AIProvider; model: string; envK
 
 const MODE_ROTATION_PRIORITIES: Record<BotMode, AIModel[]> = {
   quick: ['model-3', 'model-4', 'model-2', 'model-1'],
-  thoughtful: ['model-2', 'model-1', 'model-3', 'model-4'],
-  programming: ['model-2', 'model-1', 'model-3', 'model-4'],
+  thoughtful: ['model-3', 'model-4', 'model-2', 'model-1'],
+  programming: ['model-3', 'model-4', 'model-2', 'model-1'],
 };
 
 const MODE_TOKEN_LIMITS: Record<BotMode, number | null> = {
@@ -50,10 +50,16 @@ class AIKeyRotationService {
 
   private initializeKeys(): void {
     Object.entries(MODEL_CONFIGS).forEach(([modelId, config]) => {
+      const apiKey = process.env[config.envKey] || '';
+      console.log(`=== Initializing ${modelId} ===`);
+      console.log(`Env key: ${config.envKey}`);
+      console.log(`API key exists: ${!!apiKey}`);
+      console.log(`API key length: ${apiKey.length}`);
+
       this.keys.set(modelId as AIModel, {
         id: modelId as AIModel,
         provider: config.provider,
-        apiKey: process.env[config.envKey] || '',
+        apiKey,
         model: config.model,
         isActive: true,
         failureCount: 0,
