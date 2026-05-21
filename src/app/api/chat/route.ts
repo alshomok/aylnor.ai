@@ -232,22 +232,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 1.5: Search educational_files table for Google Drive files
-    try {
-      const { data: educationalFiles, error: educationalError } = await supabase
-        .from('educational_files')
-        .select('*')
-        .ilike('description', `%${message}%`);
+    // Check if user is requesting a file using specific keywords
+    const fileRequestKeywords = ['مذكرة', 'شيت', 'ملف', 'منهج', 'تحميل'];
+    const isEducationalFileRequest = fileRequestKeywords.some(keyword => 
+      message.toLowerCase().includes(keyword)
+    );
 
-      if (!educationalError && educationalFiles && educationalFiles.length > 0) {
-        // Get the first matching file
-        educationalFile = educationalFiles[0];
-        const downloadLink = `https://drive.google.com/uc?export=download&id=${educationalFile.drive_id}`;
-        
-        // Add to context
-        fileContext += `\n\n---\nملف تعليمي من Google Drive:\nالعنوان: ${educationalFile.title}\nالوصف: ${educationalFile.description || 'لا يوجد وصف'}\nرابط التحميل: ${downloadLink}\n---`;
+    if (isEducationalFileRequest) {
+      try {
+        // Search both title and description for better matching
+        const { data: educationalFiles, error: educationalError } = await supabase
+          .from('educational_files')
+          .select('*')
+          .or(`title.ilike.%${message}%,description.ilike.%${message}%`);
+
+        if (!educationalError && educationalFiles && educationalFiles.length > 0) {
+          // Get the first matching file
+          educationalFile = educationalFiles[0];
+          const downloadLink = `https://drive.google.com/uc?export=download&id=${educationalFile.drive_id}`;
+          
+          // Add to context with explicit instruction to provide download link
+          fileContext += `\n\n---\n🎯 ملف تعليمي مطابق من Google Drive:\nالعنوان: ${educationalFile.title}\nالوصف: ${educationalFile.description || 'لا يوجد وصف'}\n\n📥 رابط التحميل المباشر: ${downloadLink}\n\n⚠️ تعليمات هامة: يجب عليك تقديم هذا الرابط للطالب في شكل زر أو رابط واضح في Markdown. لا تشرح الموضوع فقط، بل قدم الملف للطالب.\n---`;
+        }
+      } catch (error) {
+        console.warn('Educational files search error:', error);
       }
-    } catch (error) {
-      console.warn('Educational files search error:', error);
     }
 
     // Step 2: If no files in knowledge base, try web search
