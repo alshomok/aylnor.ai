@@ -16,9 +16,10 @@ export async function middleware(request: NextRequest) {
   // Check for auth cookies to determine if user is logged in
   const accessToken = request.cookies.get('sb-access-token');
   const refreshToken = request.cookies.get('sb-refresh-token');
+  const isAuthenticated = accessToken || refreshToken;
 
   // Auto-redirect authenticated users from root or login to chat-page
-  if ((accessToken || refreshToken) && (pathname === '/' || pathname === '/sign-up-login-screen')) {
+  if (isAuthenticated && (pathname === '/' || pathname === '/sign-up-login-screen')) {
     const chatUrl = new URL('/chat-page', request.url);
     return NextResponse.redirect(chatUrl);
   }

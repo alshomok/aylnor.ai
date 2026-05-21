@@ -70,8 +70,8 @@ export default function ChatPageClient() {
       }
       loadConversations(savedConvId);
     } else {
-      // Clear local state when user logs out
-      console.log('User logged out, clearing conversations');
+      // Clear local state when user logs out but keep localStorage for persistence
+      console.log('User logged out, clearing conversations from state');
       setConversations([]);
       setMessages([]);
       setActiveConvId('');
@@ -87,6 +87,7 @@ export default function ChatPageClient() {
     }
 
     console.log('Loading conversations for user:', user.id);
+    console.log('Saved conversation ID:', savedConvId);
     try {
       const response = await fetch(`/api/conversations?userId=${user.id}`);
       if (response.ok) {
@@ -95,10 +96,16 @@ export default function ChatPageClient() {
         if (data.conversations && data.conversations.length > 0) {
           setConversations(data.conversations);
           // Use saved conversation ID if provided and exists in list
-          const targetConvId = savedConvId && data.conversations.some((c: Conversation) => c.id === savedConvId)
-            ? savedConvId
-            : data.conversations[0].id;
+          let targetConvId = data.conversations[0].id;
+          if (savedConvId && data.conversations.some((c: Conversation) => c.id === savedConvId)) {
+            targetConvId = savedConvId;
+            console.log('Using saved conversation ID:', targetConvId);
+          } else {
+            console.log('Saved conversation ID not found, using first conversation:', targetConvId);
+          }
           setActiveConvId(targetConvId);
+          // Save the selected conversation to localStorage
+          localStorage.setItem(`lastConvId_${user.id}`, targetConvId);
           loadMessages(targetConvId);
         } else {
           console.log('No conversations found, creating new one');

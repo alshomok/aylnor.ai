@@ -15,8 +15,8 @@ export interface AIKeyConfig {
 const MODEL_CONFIGS: Record<AIModel, { provider: AIProvider; model: string; envKey: string }> = {
   'model-1': { provider: 'gemini', model: 'gemini-1.5-flash', envKey: 'GEMINI_API_KEY_1' },
   'model-2': { provider: 'gemini', model: 'gemini-2.0-flash', envKey: 'GEMINI_API_KEY_2' },
-  'model-3': { provider: 'groq', model: 'llama-3.1-8b-instant', envKey: 'GROK_API_KEY_1' },
-  'model-4': { provider: 'groq', model: 'gemma2-9b-it', envKey: 'GROK_API_KEY_2' },
+  'model-3': { provider: 'groq', model: 'llama-3.1-8b-instant', envKey: 'GROQ_API_KEY_1' },
+  'model-4': { provider: 'groq', model: 'gemma2-9b-it', envKey: 'GROQ_API_KEY_2' },
 };
 
 const MODE_ROTATION_PRIORITIES: Record<BotMode, AIModel[]> = {

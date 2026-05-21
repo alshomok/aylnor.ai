@@ -5,8 +5,8 @@ import { findBestMatch } from '@/lib/matching-algorithm';
 
 const HOURLY_REQUEST_LIMITS: Record<BotMode, number> = {
   quick: Infinity,
-  thoughtful: 20,
-  programming: 15,
+  thoughtful: 50,
+  programming: 50,
 };
 
 async function checkHourlyRequestLimit(userId: string, mode: BotMode): Promise<{ allowed: boolean; remainingMinutes?: number }> {
@@ -164,25 +164,26 @@ export async function POST(request: NextRequest) {
     // Apply sliding window: keep only last 5 messages for token optimization
     const optimizedChatHistory = chatHistory.slice(-5);
 
-    // Step 1: Load all knowledge base files as context
+    // Step 1: Load all knowledge base files as context (only if needed)
     let fileContext = '';
     let foundFile: any = null;
     let isFileRequest = false;
     let educationalFile: any = null;
-    
-    try {
-      const { data: knowledgeFiles, error: knowledgeError } = await supabase
-        .from('knowledge_base')
-        .select('id, filename, file_type, file_url, description, extracted_text, created_at')
-        .order('created_at', { ascending: false });
 
-      if (!knowledgeError && knowledgeFiles && knowledgeFiles.length > 0) {
-        // Check if user is requesting a specific file
-        const fileRequestKeywords = ['شيت', 'ملف', 'pdf', 'تحميل', 'أريد', 'نبي', 'أعطني', 'أرجو', 'لو سمحت', 'ممكن', 'هل يوجد'];
-        isFileRequest = fileRequestKeywords.some(keyword => message.toLowerCase().includes(keyword));
+    // Check if user is requesting a specific file first (before loading files)
+    const fileRequestKeywords = ['شيت', 'ملف', 'pdf', 'تحميل', 'أريد', 'نبي', 'أعطني', 'أرجو', 'لو سمحت', 'ممكن', 'هل يوجد'];
+    isFileRequest = fileRequestKeywords.some(keyword => message.toLowerCase().includes(keyword));
 
-        // Use AI orchestration for intelligent search if it's a file request
-        if (isFileRequest) {
+    // Only load knowledge base files if it's a file request
+    if (isFileRequest) {
+      try {
+        const { data: knowledgeFiles, error: knowledgeError } = await supabase
+          .from('knowledge_base')
+          .select('id, filename, file_type, file_url, description, extracted_text, created_at')
+          .order('created_at', { ascending: false });
+
+        if (!knowledgeError && knowledgeFiles && knowledgeFiles.length > 0) {
+          // Use AI orchestration for intelligent search
           try {
             const aiResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/ai-orchestrate`, {
               method: 'POST',
@@ -205,38 +206,38 @@ export async function POST(request: NextRequest) {
           } catch (error) {
             console.warn('AI search failed, falling back to keyword search:', error);
           }
-        }
 
-        // Fallback to keyword search if AI didn't find a match
-        if (!foundFile && isFileRequest) {
-          const bestMatch = findBestMatch(message, knowledgeFiles);
-          if (bestMatch) {
-            foundFile = bestMatch.file;
+          // Fallback to keyword search if AI didn't find a match
+          if (!foundFile) {
+            const bestMatch = findBestMatch(message, knowledgeFiles);
+            if (bestMatch) {
+              foundFile = bestMatch.file;
+            }
           }
-        }
 
-        // Combine all files as context
-        const allFilesContext = knowledgeFiles.map((file: any) => 
-          `ملف: ${file.filename} - ${file.description}\n${file.extracted_text}`
-        ).join('\n\n---\n\n');
-        
-        fileContext = `قاعدة المعرفة (جميع الملفات):\n${allFilesContext}\n\n---\nأجب على سؤال الطالب بناءً على هذه المعلومات. اشرح بأسلوب أكاديمي مبسط.`;
+          // Combine all files as context
+          const allFilesContext = knowledgeFiles.map((file: any) =>
+            `ملف: ${file.filename} - ${file.description}\n${file.extracted_text}`
+          ).join('\n\n---\n\n');
+
+          fileContext = `قاعدة المعرفة (جميع الملفات):\n${allFilesContext}\n\n---\nأجب على سؤال الطالب بناءً على هذه المعلومات. اشرح بأسلوب أكاديمي مبسط.`;
+        }
+      } catch (error) {
+        console.warn('Knowledge base load error:', error);
       }
-    } catch (error) {
-      console.warn('Knowledge base load error:', error);
     }
 
-    // Step 1.5: Search educational_files table for Google Drive files
+    // Step 1.5: Search educational_files table for Google Drive files (only if needed)
     // Check if user is requesting a file using specific keywords
-    const fileRequestKeywords = ['مذكرة', 'شيت', 'ملف', 'منهج', 'تحميل'];
-    const isEducationalFileRequest = fileRequestKeywords.some(keyword => 
+    const educationalFileKeywords = ['مذكرة', 'شيت', 'ملف', 'منهج', 'تحميل'];
+    const isEducationalFileRequest = educationalFileKeywords.some(keyword =>
       message.toLowerCase().includes(keyword)
     );
 
     console.log('=== File Search Debug ===');
     console.log('User message:', message);
     console.log('Is file request:', isEducationalFileRequest);
-    console.log('Detected keywords:', fileRequestKeywords.filter(k => message.toLowerCase().includes(k)));
+    console.log('Detected keywords:', educationalFileKeywords.filter(k => message.toLowerCase().includes(k)));
 
     if (isEducationalFileRequest) {
       try {
