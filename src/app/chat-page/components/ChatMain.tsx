@@ -15,6 +15,7 @@ import {
   ThumbsDown,
   ChevronDown,
   MessageSquare,
+  Download,
 } from 'lucide-react';
 import { BotMode, Message, Conversation } from './ChatPageClient';
 import CodeDisplayPanel from './CodeDisplayPanel';
@@ -316,16 +317,60 @@ export default function ChatMain({
   };
 
   const renderMessageContent = (content: string) => {
-    const parts = content.split(/\*\*(.+?)\*\*/g);
-    return parts.map((part, i) =>
-      i % 2 === 1 ? (
-        <strong key={`bold-${i}`} className="font-semibold text-foreground">
-          {part}
-        </strong>
-      ) : (
-        <React.Fragment key={`text-${i}`}>{part}</React.Fragment>
-      )
-    );
+    // Convert Google Drive links to download buttons
+    const driveLinkRegex = /\[([^\]]+)\]\(https:\/\/drive\.google\.com\/uc\?export=download&id=([a-zA-Z0-9_-]+)\)/g;
+    const parts: (string | JSX.Element)[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = driveLinkRegex.exec(content)) !== null) {
+      // Add text before the link
+      if (match.index > lastIndex) {
+        parts.push(content.substring(lastIndex, match.index));
+      }
+
+      // Add download button
+      const title = match[1];
+      const driveId = match[2];
+      const downloadUrl = `https://drive.google.com/uc?export=download&id=${driveId}`;
+      
+      parts.push(
+        <a
+          key={`drive-btn-${match.index}`}
+          href={downloadUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-royal-blue hover:bg-royal-blue/80 text-white rounded-lg text-sm font-semibold transition-colors"
+        >
+          <Download size={16} />
+          {title}
+        </a>
+      );
+
+      lastIndex = match.index + match.length;
+    }
+
+    // Add remaining text
+    if (lastIndex < content.length) {
+      parts.push(content.substring(lastIndex));
+    }
+
+    // Process bold text in string parts
+    return parts.map((part, i) => {
+      if (typeof part === 'string') {
+        const boldParts = part.split(/\*\*(.+?)\*\*/g);
+        return boldParts.map((boldPart, j) =>
+          j % 2 === 1 ? (
+            <strong key={`bold-${i}-${j}`} className="font-semibold text-foreground">
+              {boldPart}
+            </strong>
+          ) : (
+            <React.Fragment key={`text-${i}-${j}`}>{boldPart}</React.Fragment>
+          )
+        );
+      }
+      return part;
+    });
   };
 
   return (
