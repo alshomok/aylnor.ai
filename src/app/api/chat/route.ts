@@ -11,12 +11,21 @@ const HOURLY_REQUEST_LIMITS: Record<BotMode, number> = {
 
 async function checkHourlyRequestLimit(userId: string, mode: BotMode): Promise<{ allowed: boolean; remainingMinutes?: number }> {
   const server = supabaseServer();
-  if (!server) return { allowed: true };
+  if (!server) {
+    console.warn('Supabase server client not initialized, allowing request');
+    return { allowed: true };
+  }
 
   const limit = HOURLY_REQUEST_LIMITS[mode];
   if (limit === Infinity) return { allowed: true };
 
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  console.log('=== Hourly Limit Check ===');
+  console.log('User ID:', userId);
+  console.log('Mode:', mode);
+  console.log('Limit:', limit);
+  console.log('One hour ago:', oneHourAgo);
 
   const { count, error } = await server
     .from('messages')
@@ -27,9 +36,12 @@ async function checkHourlyRequestLimit(userId: string, mode: BotMode): Promise<{
     .gte('created_at', oneHourAgo);
 
   if (error) {
-    console.error('Error checking hourly limit:', error);
+    console.error('Error checking hourly limit:', JSON.stringify(error));
+    console.error('Error details:', error);
     return { allowed: true }; // Allow on error
   }
+
+  console.log('Request count:', count);
 
   const requestCount = count || 0;
   if (requestCount >= limit) {
