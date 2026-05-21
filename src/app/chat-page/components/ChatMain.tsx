@@ -20,6 +20,8 @@ import {
 import { BotMode, Message, Conversation } from './ChatPageClient';
 import CodeDisplayPanel from './CodeDisplayPanel';
 import FileCard from './FileCard';
+import CodeExecution from './CodeExecution';
+import { FileDownloadCard } from './FileDownloadCard';
 import { useAuth } from '@/contexts/auth-context';
 
 interface ChatMainProps {
@@ -320,7 +322,7 @@ export default function ChatMain({
   };
 
   const renderMessageContent = (content: string) => {
-    // Convert Google Drive links to download buttons
+    // Convert Google Drive links to FileDownloadCard
     const driveLinkRegex = /\[([^\]]+)\]\(https:\/\/drive\.google\.com\/uc\?export=download&id=([a-zA-Z0-9_-]+)\)/g;
     const parts: (string | React.ReactNode)[] = [];
     let lastIndex = 0;
@@ -332,20 +334,31 @@ export default function ChatMain({
         parts.push(content.substring(lastIndex, match.index));
       }
 
-      // Add download button
+      // Add FileDownloadCard instead of simple button
       const title = match[1];
       const driveId = match[2];
       const downloadUrl = `https://drive.google.com/uc?export=download&id=${driveId}`;
-      
+
+      // Determine file type based on title or extension
+      let fileType: 'pdf' | 'excel' | 'word' | 'zip' | 'general' = 'general';
+      if (title.toLowerCase().includes('.pdf') || title.toLowerCase().includes('pdf')) {
+        fileType = 'pdf';
+      } else if (title.toLowerCase().includes('.xlsx') || title.toLowerCase().includes('.xls') || title.toLowerCase().includes('excel') || title.toLowerCase().includes('شيت')) {
+        fileType = 'excel';
+      } else if (title.toLowerCase().includes('.docx') || title.toLowerCase().includes('.doc') || title.toLowerCase().includes('word')) {
+        fileType = 'word';
+      } else if (title.toLowerCase().includes('.zip') || title.toLowerCase().includes('.rar')) {
+        fileType = 'zip';
+      }
+
       parts.push(
-        <a
-          key={`drive-btn-${match.index}`}
-          href={downloadUrl}
-          className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-royal-blue hover:bg-royal-blue/80 text-white rounded-lg text-sm font-semibold transition-colors"
-        >
-          <Download size={16} />
-          {title}
-        </a>
+        <FileDownloadCard
+          key={`drive-card-${match.index}`}
+          fileName={title}
+          fileType={fileType}
+          downloadUrl={downloadUrl}
+          fileSize="غير معروف"
+        />
       );
 
       lastIndex = match.index + match.length;
@@ -552,6 +565,8 @@ export default function ChatMain({
                           {msg.codeBlock.code.length > 300 ? '\n…' : ''}
                         </code>
                       </pre>
+                      {/* Code execution component */}
+                      <CodeExecution code={msg.codeBlock.code} language={msg.codeBlock.language} />
                     </div>
                   )}
                 </div>

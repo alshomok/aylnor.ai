@@ -59,7 +59,7 @@ export default function AuthScreen() {
             {[
               { icon: BookOpen, label: 'مساعد أكاديمي', desc: 'الواجبات، المقالات، البحث' },
               { icon: Code2, label: 'مساعد البرمجة', desc: '+20 لغة برمجة' },
-              { icon: Brain, label: 'ذكاء اصطناعي متعدد الأوضاع', desc: 'سريع، متأمل، برمجة' },
+              { icon: Brain, label: 'ذكاء اصطناعي متعدد الأوضاع', desc: 'سريع، مفكر، مبرمج' },
             ].map((item) => {
               const ItemIcon = item.icon;
               return (
@@ -81,7 +81,7 @@ export default function AuthScreen() {
         </div>
 
         <p className="relative z-10 text-blue-300 text-xs text-right">
-          © 2026 aylnor.ai — بُني بواسطة Aylnor Vasquez
+          © 2026 aylnor.ai — بُني بواسطة المهندس الطلب احمد قريز
         </p>
       </div>
 
