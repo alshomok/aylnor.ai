@@ -7,32 +7,37 @@ interface CodeExecutionProps {
   language: string;
 }
 
-// Language mapping for Piston API
+// Language mapping for Piston API with official versions
 const LANGUAGE_MAP: Record<string, { language: string; version: string }> = {
-  javascript: { language: 'javascript', version: '*' },
-  typescript: { language: 'typescript', version: '*' },
-  python: { language: 'python', version: '3.12.0' },
-  rust: { language: 'rust', version: '*' },
-  go: { language: 'go', version: '*' },
-  c: { language: 'c', version: '*' },
-  'c++': { language: 'c++', version: '*' },
-  cpp: { language: 'c++', version: '*' },
-  java: { language: 'java', version: '*' },
-  csharp: { language: 'csharp', version: '*' },
-  'c#': { language: 'csharp', version: '*' },
-  swift: { language: 'swift', version: '*' },
-  kotlin: { language: 'kotlin', version: '*' },
-  ruby: { language: 'ruby', version: '*' },
-  php: { language: 'php', version: '*' },
-  scala: { language: 'scala', version: '*' },
-  haskell: { language: 'haskell', version: '*' },
-  elixir: { language: 'elixir', version: '*' },
-  clojure: { language: 'clojure', version: '*' },
-  julia: { language: 'julia', version: '*' },
-  r: { language: 'r', version: '*' },
-  matlab: { language: 'octave', version: '*' }, // Octave as MATLAB alternative
-  lua: { language: 'lua', version: '*' },
-  dart: { language: 'dart', version: '*' },
+  typescript: { language: 'typescript', version: '5.0.3' },
+  ts: { language: 'typescript', version: '5.0.3' },
+  javascript: { language: 'javascript', version: '18.15.0' },
+  js: { language: 'javascript', version: '18.15.0' },
+  python: { language: 'python', version: '3.10.0' },
+  py: { language: 'python', version: '3.10.0' },
+  rust: { language: 'rust', version: '1.68.2' },
+  rs: { language: 'rust', version: '1.68.2' },
+  go: { language: 'go', version: '1.19.4' },
+  c: { language: 'c', version: '10.2.0' },
+  'c++': { language: 'cpp', version: '10.2.0' },
+  cpp: { language: 'cpp', version: '10.2.0' },
+  csharp: { language: 'csharp', version: '6.12.0' },
+  'c#': { language: 'csharp', version: '6.12.0' },
+  java: { language: 'java', version: '15.0.2' },
+  swift: { language: 'swift', version: '5.3.3' },
+  kotlin: { language: 'kotlin', version: '1.8.20' },
+  ruby: { language: 'ruby', version: '3.0.1' },
+  php: { language: 'php', version: '8.2.3' },
+  scala: { language: 'scala', version: '3.2.2' },
+  haskell: { language: 'haskell', version: '9.4.4' },
+  elixir: { language: 'elixir', version: '1.14.3' },
+  clojure: { language: 'clojure', version: '1.11.1' },
+  julia: { language: 'julia', version: '1.8.5' },
+  r: { language: 'r', version: '4.2.2' },
+  octave: { language: 'octave', version: '8.1.0' },
+  matlab: { language: 'octave', version: '8.1.0' },
+  lua: { language: 'lua', version: '5.4.4' },
+  dart: { language: 'dart', version: '2.19.6' },
   html: { language: 'html', version: '*' },
   css: { language: 'css', version: '*' },
 };
@@ -66,17 +71,12 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
     }
 
     try {
-      // Handle HTML/CSS with iframe
+      // Handle HTML/CSS with iframe using srcDoc for live preview
       if (langKey === 'html') {
         if (iframeRef.current) {
-          const doc = iframeRef.current.contentDocument;
-          if (doc) {
-            doc.open();
-            doc.write(code);
-            doc.close();
-            setOutput('HTML rendered in preview below');
-            setShowOutput(true);
-          }
+          iframeRef.current.srcdoc = code;
+          setOutput('HTML rendered in preview below');
+          setShowOutput(true);
         }
         setIsExecuting(false);
         return;
@@ -88,7 +88,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
         return;
       }
 
-      // Use Piston API for other languages
+      // Use official Piston API for other languages
       const response = await fetch('https://emkc.org/api/v2/piston/execute', {
         method: 'POST',
         headers: {
@@ -107,6 +107,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
 
       const data = await response.json();
 
+      // Parse response and hydrate output state
       if (data.run) {
         if (data.run.stdout) {
           setOutput(data.run.stdout);
@@ -116,6 +117,9 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
         }
         if (data.run.code !== 0 && !data.run.stderr) {
           setError(`Execution failed with exit code ${data.run.code}`);
+        }
+        if (!data.run.stdout && !data.run.stderr && data.run.code === 0) {
+          setOutput('Code executed successfully (no output)');
         }
       } else if (data.message) {
         setError(data.message);
