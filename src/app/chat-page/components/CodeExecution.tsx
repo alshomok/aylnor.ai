@@ -36,6 +36,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
     setOutput('');
 
     const langKey = language.toLowerCase();
+    console.log('Executing code for language:', langKey);
 
     if (!SUPPORTED_LANGUAGES.includes(langKey)) {
       setError(`Language "${language}" is not supported. Supported: JavaScript, TypeScript, Python, C, C++, HTML, CSS.`);
@@ -46,6 +47,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
     try {
       // Handle HTML with iframe using srcDoc
       if (langKey === 'html') {
+        console.log('Executing HTML code');
         if (iframeRef.current) {
           iframeRef.current.srcdoc = code;
           setOutput('HTML rendered in preview below');
@@ -64,6 +66,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
 
       // Handle JavaScript/TypeScript with eval
       if (langKey === 'javascript' || langKey === 'js' || langKey === 'typescript' || langKey === 'ts') {
+        console.log('Executing JavaScript/TypeScript code');
         const consoleOutput: string[] = [];
         const originalConsole = { ...console };
 
@@ -98,6 +101,8 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
             .replace(/import\s+.*from\s+['"][^'"]+['"]/g, '') // Remove imports
             .replace(/export\s+(default|const|let|var|function|class)/g, '$1'); // Remove exports
 
+          console.log('Processed JS code:', jsCode);
+          
           // Execute the code
           const result = eval(jsCode);
           
@@ -107,6 +112,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
 
           setOutput(consoleOutput.join('\n') || 'Code executed successfully (no output)');
         } catch (e) {
+          console.error('JS execution error:', e);
           setError(e instanceof Error ? e.message : String(e));
         } finally {
           // Restore console
@@ -118,9 +124,11 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
 
       // Handle Python with Pyodide (WebAssembly)
       if (langKey === 'python' || langKey === 'py') {
+        console.log('Executing Python code');
         try {
           // Load Pyodide if not already loaded
           if (!pyodideRef.current) {
+            console.log('Loading Pyodide...');
             const pyodideScript = document.createElement('script');
             pyodideScript.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
             document.head.appendChild(pyodideScript);
@@ -131,6 +139,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
             });
 
             pyodideRef.current = await (window as any).loadPyodide();
+            console.log('Pyodide loaded successfully');
           }
 
           const pyodide = pyodideRef.current;
@@ -155,27 +164,31 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
             setOutput('Code executed successfully (no output)');
           }
         } catch (e) {
+          console.error('Python execution error:', e);
           setError(e instanceof Error ? e.message : String(e));
         }
         setIsExecuting(false);
         return;
       }
 
-      // Handle C and C++ with Godbolt Compiler Explorer (iframe)
+      // Handle C and C++ with Godbolt Compiler Explorer (embed)
       if (langKey === 'c' || langKey === 'cpp' || langKey === 'c++') {
+        console.log('Executing C/C++ code');
         const godboltLang = langKey === 'c' ? 'c' : 'cpp';
         const encodedCode = encodeURIComponent(code);
-        const godboltUrl = `https://godbolt.org/clientapi/${godboltLang}/compiler/g112/latest/compile?options=&code=${encodedCode}`;
+        // Use embed URL instead of API
+        const godboltUrl = `https://godbolt.org/e#${godboltLang}`;
         
-        if (iframeRef.current) {
-          iframeRef.current.src = godboltUrl;
-          setOutput('Code sent to Godbolt Compiler Explorer for execution. See preview below.');
-          setShowOutput(true);
-        }
+        // Open Godbolt in new tab with code
+        window.open(`https://godbolt.org/z/${encodedCode}`, '_blank');
+        
+        setOutput('Code opened in Godbolt Compiler Explorer in new tab for execution.');
+        setShowOutput(true);
         setIsExecuting(false);
         return;
       }
     } catch (e) {
+      console.error('Execution error:', e);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setIsExecuting(false);
