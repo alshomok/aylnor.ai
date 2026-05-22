@@ -1,46 +1,19 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Copy, Check, X, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Play, Copy, Check, AlertTriangle, ExternalLink } from 'lucide-react';
 
 interface CodeExecutionProps {
   code: string;
   language: string;
 }
 
-// Language mapping for Piston API with official versions
-const LANGUAGE_MAP: Record<string, { language: string; version: string }> = {
-  typescript: { language: 'typescript', version: '5.0.3' },
-  ts: { language: 'typescript', version: '5.0.3' },
-  javascript: { language: 'javascript', version: '18.15.0' },
-  js: { language: 'javascript', version: '18.15.0' },
-  python: { language: 'python', version: '3.10.0' },
-  py: { language: 'python', version: '3.10.0' },
-  rust: { language: 'rust', version: '1.68.2' },
-  rs: { language: 'rust', version: '1.68.2' },
-  go: { language: 'go', version: '1.19.4' },
-  c: { language: 'c', version: '10.2.0' },
-  'c++': { language: 'cpp', version: '10.2.0' },
-  cpp: { language: 'cpp', version: '10.2.0' },
-  csharp: { language: 'csharp', version: '6.12.0' },
-  'c#': { language: 'csharp', version: '6.12.0' },
-  java: { language: 'java', version: '15.0.2' },
-  swift: { language: 'swift', version: '5.3.3' },
-  kotlin: { language: 'kotlin', version: '1.8.20' },
-  ruby: { language: 'ruby', version: '3.0.1' },
-  php: { language: 'php', version: '8.2.3' },
-  scala: { language: 'scala', version: '3.2.2' },
-  haskell: { language: 'haskell', version: '9.4.4' },
-  elixir: { language: 'elixir', version: '1.14.3' },
-  clojure: { language: 'clojure', version: '1.11.1' },
-  julia: { language: 'julia', version: '1.8.5' },
-  r: { language: 'r', version: '4.2.2' },
-  octave: { language: 'octave', version: '8.1.0' },
-  matlab: { language: 'octave', version: '8.1.0' },
-  lua: { language: 'lua', version: '5.4.4' },
-  dart: { language: 'dart', version: '2.19.6' },
-  html: { language: 'html', version: '*' },
-  css: { language: 'css', version: '*' },
-};
+// Supported languages with client-side execution
+const SUPPORTED_LANGUAGES = [
+  'javascript', 'js', 'typescript', 'ts',
+  'html', 'css',
+  'python', 'py',
+  'c', 'cpp', 'c++'
+];
 
 export default function CodeExecution({ code, language }: CodeExecutionProps) {
   const [isExecuting, setIsExecuting] = useState(false);
@@ -49,6 +22,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
   const [copied, setCopied] = useState(false);
   const [showOutput, setShowOutput] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const pyodideRef = useRef<any>(null);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(code);
@@ -62,16 +36,15 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
     setOutput('');
 
     const langKey = language.toLowerCase();
-    const langConfig = LANGUAGE_MAP[langKey];
 
-    if (!langConfig) {
-      setError(`Language "${language}" is not supported for execution.`);
+    if (!SUPPORTED_LANGUAGES.includes(langKey)) {
+      setError(`Language "${language}" is not supported. Supported: JavaScript, TypeScript, Python, C, C++, HTML, CSS.`);
       setIsExecuting(false);
       return;
     }
 
     try {
-      // Handle HTML/CSS with iframe using srcDoc for live preview
+      // Handle HTML with iframe using srcDoc
       if (langKey === 'html') {
         if (iframeRef.current) {
           iframeRef.current.srcdoc = code;
@@ -82,49 +55,125 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
         return;
       }
 
+      // Handle CSS
       if (langKey === 'css') {
         setError('CSS execution requires HTML context. Please use HTML with embedded CSS.');
         setIsExecuting(false);
         return;
       }
 
-      // Use official Piston API for other languages
-      const response = await fetch('https://emkc.org/api/v2/piston/execute', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          language: langConfig.language,
-          version: langConfig.version,
-          files: [
-            {
-              content: code,
-            },
-          ],
-        }),
-      });
+      // Handle JavaScript/TypeScript with eval
+      if (langKey === 'javascript' || langKey === 'js' || langKey === 'typescript' || langKey === 'ts') {
+        const consoleOutput: string[] = [];
+        const originalConsole = { ...console };
 
-      const data = await response.json();
+        // Override console methods to capture output
+        console.log = (...args: any[]) => {
+          consoleOutput.push(args.map(arg => 
+            typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+          ).join(' '));
+          originalConsole.log(...args);
+        };
 
-      // Parse response and hydrate output state
-      if (data.run) {
-        if (data.run.stdout) {
-          setOutput(data.run.stdout);
+        console.error = (...args: any[]) => {
+          consoleOutput.push('ERROR: ' + args.map(arg => 
+            typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+          ).join(' '));
+          originalConsole.error(...args);
+        };
+
+        console.warn = (...args: any[]) => {
+          consoleOutput.push('WARN: ' + args.map(arg => 
+            typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+          ).join(' '));
+          originalConsole.warn(...args);
+        };
+
+        try {
+          // Remove TypeScript type annotations for execution
+          const jsCode = code
+            .replace(/:\s*\w+/g, '') // Remove type annotations
+            .replace(/interface\s+\w+\s*{[^}]*}/g, '') // Remove interfaces
+            .replace(/type\s+\w+\s*=[^;]+;/g, '') // Remove type aliases
+            .replace(/import\s+.*from\s+['"][^'"]+['"]/g, '') // Remove imports
+            .replace(/export\s+(default|const|let|var|function|class)/g, '$1'); // Remove exports
+
+          // Execute the code
+          const result = eval(jsCode);
+          
+          if (result !== undefined) {
+            consoleOutput.push(String(result));
+          }
+
+          setOutput(consoleOutput.join('\n') || 'Code executed successfully (no output)');
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e));
+        } finally {
+          // Restore console
+          Object.assign(console, originalConsole);
         }
-        if (data.run.stderr) {
-          setError(data.run.stderr);
+        setIsExecuting(false);
+        return;
+      }
+
+      // Handle Python with Pyodide (WebAssembly)
+      if (langKey === 'python' || langKey === 'py') {
+        try {
+          // Load Pyodide if not already loaded
+          if (!pyodideRef.current) {
+            const pyodideScript = document.createElement('script');
+            pyodideScript.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
+            document.head.appendChild(pyodideScript);
+            
+            await new Promise((resolve, reject) => {
+              pyodideScript.onload = resolve;
+              pyodideScript.onerror = reject;
+            });
+
+            pyodideRef.current = await (window as any).loadPyodide();
+          }
+
+          const pyodide = pyodideRef.current;
+          
+          // Capture stdout
+          pyodide.setStdout({
+            batched: (text: string) => {
+              setOutput(prev => prev + text);
+            }
+          });
+          
+          pyodide.setStderr({
+            batched: (text: string) => {
+              setError(prev => prev + text);
+            }
+          });
+
+          // Run Python code
+          await pyodide.runPythonAsync(code);
+          
+          if (!output && !error) {
+            setOutput('Code executed successfully (no output)');
+          }
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e));
         }
-        if (data.run.code !== 0 && !data.run.stderr) {
-          setError(`Execution failed with exit code ${data.run.code}`);
+        setIsExecuting(false);
+        return;
+      }
+
+      // Handle C and C++ with Godbolt Compiler Explorer (iframe)
+      if (langKey === 'c' || langKey === 'cpp' || langKey === 'c++') {
+        const godboltLang = langKey === 'c' ? 'c' : 'cpp';
+        const encodedCode = encodeURIComponent(code);
+        const godboltUrl = `https://godbolt.org/clientapi/${godboltLang}/compiler/g112/latest/compile?options=&code=${encodedCode}`;
+        
+        if (iframeRef.current) {
+          iframeRef.current.src = godboltUrl;
+          setOutput('Code sent to Godbolt Compiler Explorer for execution. See preview below.');
+          setShowOutput(true);
         }
-        if (!data.run.stdout && !data.run.stderr && data.run.code === 0) {
-          setOutput('Code executed successfully (no output)');
-        }
-      } else if (data.message) {
-        setError(data.message);
-      } else {
-        setOutput('Code executed successfully (no output)');
+        setIsExecuting(false);
+        return;
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -133,9 +182,9 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
     }
   };
 
-  const langConfig = LANGUAGE_MAP[language.toLowerCase()];
+  const isSupported = SUPPORTED_LANGUAGES.includes(language.toLowerCase());
 
-  if (!langConfig) {
+  if (!isSupported) {
     return null;
   }
 
@@ -209,17 +258,11 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
         </div>
       )}
 
-      {/* API Attribution */}
+      {/* Info */}
       <div className="px-4 py-2 bg-muted/50 border-t border-border">
-        <a
-          href="https://emkc.org/api/v2/piston"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ExternalLink size={12} />
-          Powered by Piston API
-        </a>
+        <p className="text-xs text-muted-foreground">
+          Client-side execution • No server required
+        </p>
       </div>
     </div>
   );
