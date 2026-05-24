@@ -59,19 +59,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { error: { message: 'Supabase not initialized' } as AuthError };
     }
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+          emailRedirectTo: `${window.location.origin}/sign-up-login-screen`,
         },
-        emailRedirectTo: `${window.location.origin}/sign-up-login-screen`,
-      },
-    });
+      });
 
-    // User profile is created automatically by database trigger
-    return { error };
+      // Log detailed error information for debugging
+      if (error) {
+        console.error('Signup error details:', {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+          fullError: JSON.stringify(error, null, 2),
+        });
+      }
+
+      // User profile is created automatically by database trigger
+      return { error };
+    } catch (err) {
+      console.error('Unexpected signup error:', err);
+      return { error: { message: 'An unexpected error occurred during signup' } as AuthError };
+    }
   };
 
   const signIn = async (email: string, password: string) => {
