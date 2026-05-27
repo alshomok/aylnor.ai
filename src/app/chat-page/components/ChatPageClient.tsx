@@ -65,10 +65,16 @@ export default function ChatPageClient() {
   useEffect(() => {
     const conversationId = searchParams.get('id');
     if (conversationId && conversationId !== activeConvId) {
+      // Immediately clear messages to prevent showing old conversation's messages
+      setMessages([]);
       setActiveConvId(conversationId);
       loadMessages(conversationId);
+    } else if (!conversationId && activeConvId) {
+      // If no conversation ID in URL but we have one in state, clear it
+      setMessages([]);
+      setActiveConvId('');
     }
-  }, [searchParams]);
+  }, [searchParams, activeConvId]);
 
   // Register auth state change callback for historical data hydration
   useEffect(() => {
@@ -220,13 +226,13 @@ export default function ChatPageClient() {
   };
 
   const handleSelectConversation = (conversationId: string) => {
-    setActiveConvId(conversationId);
+    // Don't manually call loadMessages here - the URL sync useEffect will handle it
+    // This prevents race conditions and duplicate calls
     router.push(`/chat-page?id=${conversationId}`);
     // Save to localStorage for persistence
     if (user?.id) {
       localStorage.setItem(`lastConvId_${user.id}`, conversationId);
     }
-    loadMessages(conversationId);
   };
 
   if (isLoading) {

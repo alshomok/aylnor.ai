@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { FileText, Download, ExternalLink } from 'lucide-react';
 
 interface FileDownloadCardProps {
   fileName: string;
@@ -11,89 +12,52 @@ interface FileDownloadCardProps {
 
 export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
   fileName = "شيت المادة الأكاديمية",
-  fileSize = "Unknown size",
+  fileSize = "غير معروف",
   fileType = "pdf",
   downloadUrl
 }) => {
-  
-  // تحديد الأيقونة واللون بناءً على نوع الملف
-  const getFileStyle = () => {
+
+  // تحديد نوع الملف للعرض
+  const getFileTypeLabel = () => {
     switch(fileType) {
-      case 'pdf':
-        return {
-          bgColor: 'bg-red-50 dark:bg-red-950/30',
-          textColor: 'text-red-600 dark:text-red-400',
-          borderColor: 'border-red-100 dark:border-red-900/50',
-          icon: (
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 15h6" />
-            </svg>
-          )
-        };
-      case 'excel':
-        return {
-          bgColor: 'bg-emerald-50 dark:bg-emerald-950/30',
-          textColor: 'text-emerald-600 dark:text-emerald-400',
-          borderColor: 'border-emerald-100 dark:border-emerald-900/50',
-          icon: (
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 0v4m0-4h4m-4 0H8m11 4V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2z" />
-            </svg>
-          )
-        };
-      default:
-        return {
-          bgColor: 'bg-indigo-50 dark:bg-indigo-950/30',
-          textColor: 'text-indigo-600 dark:text-indigo-400',
-          borderColor: 'border-indigo-100 dark:border-indigo-900/50',
-          icon: (
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-          )
-        };
+      case 'pdf': return 'PDF';
+      case 'excel': return 'Excel';
+      case 'word': return 'Word';
+      case 'zip': return 'ZIP';
+      default: return 'ملف';
     }
   };
 
-  const style = getFileStyle();
-
   return (
-    <div className={`my-3 w-full max-w-sm border ${style.borderColor} ${style.bgColor} rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 dir-rtl`}>
-      <div className="flex items-center gap-4">
-        {/* أيقونة الملف الجذابة */}
-        <div className={`p-2.5 rounded-lg bg-white dark:bg-gray-900 shadow-sm ${style.textColor}`}>
-          {style.icon}
+    <a
+      href={downloadUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="my-3 block w-full max-w-sm bg-zinc-950/60 backdrop-blur-md border border-white/10 rounded-xl p-4 hover:border-amber-500/40 transition-all duration-200 dir-rtl group"
+    >
+      <div className="flex items-center justify-between gap-4">
+        {/* أيقونة الملف مع خلفية ذهبية */}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-500/10 text-amber-500 shrink-0">
+            <FileText size={20} />
+          </div>
+
+          {/* تفاصيل الملف */}
+          <div className="flex-1 min-w-0 text-right">
+            <p className="text-sm font-semibold text-zinc-100 truncate">
+              {fileName}
+            </p>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              {getFileTypeLabel()} • الحجم: {fileSize}
+            </p>
+          </div>
         </div>
 
-        {/* تفاصيل الملف */}
-        <div className="flex-1 min-w-0 text-right">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-            {fileName}
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            الحجم: {fileSize}
-          </p>
+        {/* زر التحميل */}
+        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-amber-500/10 border border-white/10 hover:border-amber-500/30 transition-all duration-200 shrink-0">
+          <Download size={16} className="text-zinc-400 group-hover:text-amber-500 transition-colors" />
         </div>
-
-        {/* زر التحميل المباشر المكتكت */}
-        <a
-          href={downloadUrl}
-          download
-          className="flex items-center justify-center p-2 rounded-lg bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 shadow-sm transition-colors group"
-          title="تحميل الشيت مباشرة"
-        >
-          <svg 
-            className="w-5 h-5 group-hover:translate-y-0.5 transition-transform duration-150 text-indigo-600 dark:text-indigo-400" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2.5" 
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-        </a>
       </div>
-    </div>
+    </a>
   );
 };

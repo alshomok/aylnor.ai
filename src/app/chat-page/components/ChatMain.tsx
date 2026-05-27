@@ -171,6 +171,10 @@ export default function ChatMain({
 
     console.debug('Sending message', { conversationId, mode: activeMode });
 
+    // Store the conversation ID at the start of the send operation
+    // to prevent race conditions if the user switches conversations
+    const sendingConversationId = conversationId;
+
     const userMsg: Message = {
       id: `msg-${Date.now()}-user`,
       role: 'user',
@@ -186,7 +190,7 @@ export default function ChatMain({
     if (activeConv?.title === 'محادثة جديدة') {
       setConversations((prev) =>
         prev.map((c) =>
-          c.id === conversationId
+          c.id === sendingConversationId
             ? { ...c, title: content.slice(0, 40), lastMessage: content, mode: activeMode }
             : c
         )
@@ -201,7 +205,7 @@ export default function ChatMain({
         },
         body: JSON.stringify({
           message: content,
-          conversationId: conversationId,
+          conversationId: sendingConversationId,
           mode: activeMode,
           botPersonality: 'مساعد مفيد ودقيق وأكاديمي',
           userId: user.id,
