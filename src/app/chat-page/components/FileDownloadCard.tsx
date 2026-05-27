@@ -17,6 +17,17 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
   downloadUrl
 }) => {
 
+  // Convert Google Drive view link to direct download link
+  const convertToDirectDownload = (url: string): string => {
+    if (url.includes('drive.google.com/file/d/')) {
+      const match = url.match(/\/file\/d\/([^\/]+)/);
+      if (match && match[1]) {
+        return `https://drive.google.com/uc?export=download&id=${match[1]}`;
+      }
+    }
+    return url;
+  };
+
   // تحديد نوع الملف للعرض
   const getFileTypeLabel = () => {
     switch(fileType) {
@@ -28,11 +39,12 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
     }
   };
 
+  const directDownloadUrl = convertToDirectDownload(downloadUrl);
+
   return (
     <a
-      href={downloadUrl}
-      target="_blank"
-      rel="noreferrer"
+      href={directDownloadUrl}
+      download
       className="my-3 block w-full max-w-sm bg-zinc-950/60 backdrop-blur-md border border-white/10 rounded-xl p-4 hover:border-amber-500/40 transition-all duration-200 dir-rtl group"
     >
       <div className="flex items-center justify-between gap-4">

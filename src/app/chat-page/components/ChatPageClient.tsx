@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 import ChatSidebar from './ChatSidebar';
 import ChatMain from './ChatMain';
 import { useAuth } from '@/contexts/auth-context';
@@ -47,6 +48,7 @@ export default function ChatPageClient() {
   const [botPersonality, setBotPersonality] = useState('مساعد مفيد ودقيق وأكاديمي');
   const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'chat' | 'code'>('chat');
 
@@ -64,17 +66,52 @@ export default function ChatPageClient() {
   // Sync active conversation with URL query parameter
   useEffect(() => {
     const conversationId = searchParams.get('id');
-    if (conversationId && conversationId !== activeConvId) {
-      // Immediately clear messages to prevent showing old conversation's messages
-      setMessages([]);
+    if (conversationId) {
       setActiveConvId(conversationId);
-      loadMessages(conversationId);
-    } else if (!conversationId && activeConvId) {
-      // If no conversation ID in URL but we have one in state, clear it
-      setMessages([]);
+    } else {
       setActiveConvId('');
     }
-  }, [searchParams, activeConvId]);
+  }, [searchParams]);
+
+  // Strict useEffect for message loading - only depends on activeConvId
+  useEffect(() => {
+    async function loadMessages() {
+      if (!activeConvId) {
+        setMessages([]); // Only clear when no chat is active
+        return;
+      }
+
+      // Set loading state to avoid seeing old messages flicker
+      setIsMessagesLoading(true);
+
+      try {
+        const response = await fetch(`/api/messages?conversationId=${activeConvId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.messages) {
+            const formattedMessages: Message[] = data.messages.map((msg: any) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              mode: msg.mode,
+              timestamp: new Date(msg.created_at).toLocaleTimeString('ar-SA', {
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+              codeBlock: msg.code_block,
+            }));
+            setMessages(formattedMessages); // Update ONLY when data is fetched
+          }
+        }
+      } catch (error) {
+        console.error('Error loading messages:', error);
+      } finally {
+        setIsMessagesLoading(false);
+      }
+    }
+
+    loadMessages();
+  }, [activeConvId]); // Only dependency is activeConvId
 
   // Register auth state change callback for historical data hydration
   useEffect(() => {
@@ -123,31 +160,6 @@ export default function ChatPageClient() {
     }
   }, [user?.id, router, isLoading]);
 
-  const loadMessages = async (conversationId: string) => {
-    try {
-      const response = await fetch(`/api/messages?conversationId=${conversationId}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.messages) {
-          const formattedMessages: Message[] = data.messages.map((msg: any) => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            mode: msg.mode,
-            timestamp: new Date(msg.created_at).toLocaleTimeString('ar-SA', {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-            codeBlock: msg.code_block,
-          }));
-          setMessages(formattedMessages);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading messages:', error);
-    }
-  };
-
   const createNewConversation = async (): Promise<string | null> => {
     if (!user?.id) {
       console.warn('No user ID available');
@@ -180,7 +192,6 @@ export default function ChatPageClient() {
         };
         setConversations(prev => [newConv, ...prev]);
         setActiveConvId(newId);
-        setMessages([]);
         router.push(`/chat-page?id=${newId}`);
         return newId;
       }
@@ -201,7 +212,6 @@ export default function ChatPageClient() {
       if (user?.id) {
         localStorage.setItem(`lastConvId_${user.id}`, conversationId);
       }
-      setMessages([]);
       router.push(`/chat-page?id=${conversationId}`);
       console.debug('Conversation created successfully:', conversationId);
       return conversationId;
@@ -218,7 +228,6 @@ export default function ChatPageClient() {
       };
       setConversations(prev => [newConv, ...prev]);
       setActiveConvId(newId);
-      setMessages([]);
       router.push(`/chat-page?id=${newId}`);
       console.debug('Using fallback conversation ID:', newId);
       return newId;
