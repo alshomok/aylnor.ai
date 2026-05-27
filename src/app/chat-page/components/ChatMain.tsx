@@ -46,7 +46,7 @@ interface ChatMainProps {
 
 const BOT_MODES: { id: BotMode; label: string; icon: React.ElementType; description: string }[] = [
   { id: 'quick', label: 'سريع', icon: Zap, description: 'إجابات سريعة وموجزة' },
-  { id: 'thoughtful', label: 'المفكر', icon: Brain, description: 'شروحات عميقة ومفصلة' },
+  { id: 'thoughtful', label: 'مفكر', icon: Brain, description: 'شروحات عميقة ومفصلة' },
   { id: 'programming', label: 'مبرمج', icon: Code2, description: 'أولوية الكود مع تمييز الصياغة' },
 ];
 
@@ -458,29 +458,6 @@ export default function ChatMain({
           )}
         </div>
 
-        {/* Mode selector */}
-        <div className="flex items-center gap-2 px-2 sm:px-4 py-2 border-b border-border bg-card/50 shrink-0 flex-row-reverse flex-wrap">
-          <span className="text-2xs text-muted-foreground font-semibold uppercase tracking-widest mr-1 hidden sm:block">
-            :الوضع
-          </span>
-          {BOT_MODES.map((mode) => {
-            const ModeIcon = mode.icon;
-            return (
-              <button
-                key={`mode-${mode.id}`}
-                onClick={() => setActiveMode(mode.id)}
-                className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 active:scale-95 ${
-                  activeMode === mode.id ? 'mode-chip-active' : 'mode-chip-inactive'
-                }`}
-                title={mode.description}
-              >
-                <ModeIcon size={12} />
-                <span className="hidden sm:inline">{mode.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
         {/* Messages - hidden on mobile when code tab is active */}
         <div className={`flex-1 overflow-y-auto scrollbar-thin px-3 sm:px-4 py-6 space-y-5 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
           {messages.map((msg) => (
@@ -658,36 +635,58 @@ export default function ChatMain({
             <div className="relative shrink-0 mb-0.5">
               <button
                 onClick={() => setShowModeDropdown(!showModeDropdown)}
-                className="flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors text-xs sm:text-sm"
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 active:scale-95 ${
+                  showModeDropdown
+                    ? 'bg-muted border border-border'
+                    : 'bg-muted/50 hover:bg-muted border border-transparent hover:border-border'
+                }`}
                 title="اختر وضع البوت"
               >
-                {BOT_MODES.find((m) => m.id === activeMode)?.icon && (
-                  React.createElement(BOT_MODES.find((m) => m.id === activeMode)!.icon, { size: 12 })
-                )}
-                <span className="hidden sm:inline text-xs">{BOT_MODES.find((m) => m.id === activeMode)?.label}</span>
-                <ChevronDown size={12} />
+                {(() => {
+                  const activeModeData = BOT_MODES.find((m) => m.id === activeMode);
+                  const ActiveIcon = activeModeData?.icon;
+                  return (
+                    <>
+                      {ActiveIcon && <ActiveIcon size={16} className={activeMode === 'quick' ? 'text-yellow-400' : activeMode === 'thoughtful' ? 'text-blue-400' : 'text-green-400'} />}
+                      <span className="text-xs font-semibold">{activeModeData?.label}</span>
+                      <ChevronDown size={14} className={`transition-transform duration-200 ${showModeDropdown ? 'rotate-180' : ''}`} />
+                    </>
+                  );
+                })()}
               </button>
 
               {showModeDropdown && (
-                <div className="absolute bottom-full right-0 mb-2 w-44 sm:w-48 bg-card border border-border rounded-lg shadow-lg z-50">
-                  {BOT_MODES.map((mode) => (
-                    <button
-                      key={mode.id}
-                      onClick={() => {
-                        setActiveMode(mode.id);
-                        setShowModeDropdown(false);
-                      }}
-                      className={`w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-right hover:bg-muted/50 transition-colors ${
-                        activeMode === mode.id ? 'bg-muted' : ''
-                      }`}
-                    >
-                      {React.createElement(mode.icon, { size: 12 })}
-                      <div className="flex-1">
-                        <div className="font-medium text-xs">{mode.label}</div>
-                        <div className="text-xs text-muted-foreground hidden sm:block">{mode.description}</div>
-                      </div>
-                    </button>
-                  ))}
+                <div className="absolute bottom-full right-0 mb-2 w-48 bg-card border border-border rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  {BOT_MODES.map((mode) => {
+                    const ModeIcon = mode.icon;
+                    return (
+                      <button
+                        key={mode.id}
+                        onClick={() => {
+                          setActiveMode(mode.id);
+                          setShowModeDropdown(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 text-right hover:bg-muted/50 transition-colors ${
+                          activeMode === mode.id ? 'bg-muted/70' : ''
+                        }`}
+                      >
+                        <ModeIcon
+                          size={16}
+                          className={
+                            mode.id === 'quick'
+                              ? 'text-yellow-400'
+                              : mode.id === 'thoughtful'
+                                ? 'text-blue-400'
+                                : 'text-green-400'
+                          }
+                        />
+                        <div className="flex-1">
+                          <div className="text-xs font-semibold text-foreground">{mode.label}</div>
+                          <div className="text-2xs text-muted-foreground">{mode.description}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

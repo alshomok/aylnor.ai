@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
 import {
   MessageSquare,
@@ -34,8 +34,9 @@ interface ChatSidebarProps {
   open: boolean;
   onToggle: () => void;
   conversations: Conversation[];
+  setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
   activeConvId: string;
-  onSelectConversation: (id: string) => void;
+  setActiveConvId: React.Dispatch<React.SetStateAction<string>>;
   theme: Theme;
   onThemeToggle: () => void;
   botName: string;
@@ -73,8 +74,9 @@ export default function ChatSidebar({
   open,
   onToggle,
   conversations,
+  setConversations,
   activeConvId,
-  onSelectConversation,
+  setActiveConvId,
   theme,
   onThemeToggle,
   botName,
@@ -87,8 +89,9 @@ export default function ChatSidebar({
   mobileOpen,
   onMobileClose,
 }: ChatSidebarProps) {
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeSection, setActiveSection] = useState<'chats'>('chats');
   const [editingBotName, setEditingBotName] = useState(false);
   const [tempBotName, setTempBotName] = useState(botName);
@@ -97,6 +100,35 @@ export default function ChatSidebar({
   const [searchQuery, setSearchQuery] = useState('');
   const [settingsDropdownOpen, setSettingsDropdownOpen] = useState(false);
   const settingsDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Dynamic History Fetching - fetch all conversations for logged-in user
+  useEffect(() => {
+    const fetchConversations = async () => {
+      if (!user?.id) return;
+
+      try {
+        const response = await fetch(`/api/conversations?userId=${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.conversations) {
+            setConversations(data.conversations);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching conversations:', error);
+      }
+    };
+
+    fetchConversations();
+  }, [user?.id, setConversations]);
+
+  // Sync active conversation with URL query parameter
+  useEffect(() => {
+    const conversationId = searchParams.get('id');
+    if (conversationId && conversationId !== activeConvId) {
+      setActiveConvId(conversationId);
+    }
+  }, [searchParams, activeConvId, setActiveConvId]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -232,7 +264,7 @@ export default function ChatSidebar({
               <button
                 key={conv.id}
                 onClick={() => {
-                  onSelectConversation(conv.id);
+                  router.push(`/chat-page?id=${conv.id}`);
                   onMobileClose?.();
                 }}
                 className={`w-full text-right rounded-xl sidebar-item-hover transition-all ${

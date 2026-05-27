@@ -57,13 +57,6 @@ export default function HeroSection() {
           filter: 'blur(60px)',
         }}
       />
-      <div
-        className="absolute top-40 right-1/4 w-64 h-64 rounded-full opacity-8 pointer-events-none"
-        style={{
-          background: 'radial-gradient(circle, var(--gold), transparent 70%)',
-          filter: 'blur(50px)',
-        }}
-      />
 
       <div className="max-w-screen-xl mx-auto text-center">
         {/* Badge */}
@@ -88,20 +81,13 @@ export default function HeroSection() {
         </p>
 
         {/* CTAs */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12 sm:mb-16">
+        <div className="flex items-center justify-center mb-12 sm:mb-16">
           <Link
             href="/sign-up-login-screen"
             className="btn-gold inline-flex items-center gap-2.5 px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl text-base font-bold w-full sm:w-auto justify-center"
           >
             <ArrowLeft size={18} />
-            ابدأ مجاناً
-          </Link>
-          <Link
-            href="/chat-page"
-            className="btn-primary inline-flex items-center gap-2.5 px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl text-base font-semibold w-full sm:w-auto justify-center"
-          >
-            <Sparkles size={16} />
-            جرب المحادثة
+            تسجيل دخول
           </Link>
         </div>
 

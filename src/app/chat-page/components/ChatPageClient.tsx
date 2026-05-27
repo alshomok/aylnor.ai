@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ChatSidebar from './ChatSidebar';
 import ChatMain from './ChatMain';
 import { useAuth } from '@/contexts/auth-context';
@@ -33,6 +34,8 @@ export interface Conversation {
 
 export default function ChatPageClient() {
   const { user, onAuthStateChange } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [theme, setTheme] = useState<Theme>('dark');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeMode, setActiveMode] = useState<BotMode>('thoughtful');
@@ -58,12 +61,21 @@ export default function ChatPageClient() {
     }
   }, [user]);
 
+  // Sync active conversation with URL query parameter
+  useEffect(() => {
+    const conversationId = searchParams.get('id');
+    if (conversationId && conversationId !== activeConvId) {
+      setActiveConvId(conversationId);
+      loadMessages(conversationId);
+    }
+  }, [searchParams]);
+
   // Register auth state change callback for historical data hydration
   useEffect(() => {
     if (onAuthStateChange) {
       const handleAuthStateChange = (event: string, session: any) => {
         console.log('Auth state changed:', event, 'Session:', !!session);
-        
+
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           if (session?.user?.id) {
             console.log('User signed in, loading historical data');
@@ -72,8 +84,10 @@ export default function ChatPageClient() {
             if (savedConvId) {
               console.log('Restoring last conversation:', savedConvId);
               setActiveConvId(savedConvId);
+              router.push(`/chat-page?id=${savedConvId}`);
             }
-            loadConversations(savedConvId);
+            // Conversations are now fetched by Sidebar component
+            setIsLoading(false);
           }
         } else if (event === 'SIGNED_OUT') {
           console.log('User signed out, clearing all local state');
@@ -87,65 +101,21 @@ export default function ChatPageClient() {
 
       onAuthStateChange(handleAuthStateChange);
     }
-  }, [onAuthStateChange]);
+  }, [onAuthStateChange, router]);
 
   // Load conversations whenever user changes (login/logout) - fallback for direct user changes
   useEffect(() => {
     console.log('User ID changed:', user?.id);
     if (user?.id) {
-      // This is handled by auth state change callback, but we keep this as fallback
+      // This is handled by auth state change callback and Sidebar component
       const savedConvId = localStorage.getItem(`lastConvId_${user.id}`) || undefined;
-      if (!isLoading) {
-        loadConversations(savedConvId);
+      if (savedConvId && !isLoading) {
+        setActiveConvId(savedConvId);
+        router.push(`/chat-page?id=${savedConvId}`);
       }
-    }
-  }, [user?.id]);
-
-  const loadConversations = async (savedConvId?: string) => {
-    if (!user?.id) {
-      console.warn('No user ID available');
-      setIsLoading(false);
-      return;
-    }
-
-    console.log('Loading conversations for user:', user.id);
-    console.log('Saved conversation ID:', savedConvId);
-    try {
-      const response = await fetch(`/api/conversations?userId=${user.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Conversations loaded:', data.conversations?.length || 0);
-        if (data.conversations && data.conversations.length > 0) {
-          setConversations(data.conversations);
-          // Use saved conversation ID if provided and exists in list
-          let targetConvId = data.conversations[0].id;
-          if (savedConvId && data.conversations.some((c: Conversation) => c.id === savedConvId)) {
-            targetConvId = savedConvId;
-            console.log('Using saved conversation ID:', targetConvId);
-          } else {
-            console.log('Saved conversation ID not found, using first conversation:', targetConvId);
-          }
-          setActiveConvId(targetConvId);
-          // Save the selected conversation to localStorage
-          localStorage.setItem(`lastConvId_${user.id}`, targetConvId);
-          loadMessages(targetConvId);
-        } else {
-          console.log('No conversations found, creating new one');
-          // Create initial conversation if none exists
-          createNewConversation();
-        }
-      } else {
-        console.error('Failed to load conversations, status:', response.status);
-        // Fallback to local state if API fails
-        createNewConversation();
-      }
-    } catch (error) {
-      console.error('Error loading conversations:', error);
-      createNewConversation();
-    } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.id, router, isLoading]);
 
   const loadMessages = async (conversationId: string) => {
     try {
@@ -193,7 +163,7 @@ export default function ChatPageClient() {
       if (!response.ok) {
         const errorData = await response.json();
         console.error('Failed to create conversation:', response.status, errorData);
-        // Use fallback local state if error
+        // Use fallback local state if error - preserve existing conversations
         const newId = `conv-${Date.now()}`;
         const newConv: Conversation = {
           id: newId,
@@ -202,9 +172,10 @@ export default function ChatPageClient() {
           timestamp: 'الآن',
           mode: activeMode,
         };
-        setConversations([newConv]);
+        setConversations(prev => [newConv, ...prev]);
         setActiveConvId(newId);
         setMessages([]);
+        router.push(`/chat-page?id=${newId}`);
         return newId;
       }
 
@@ -217,18 +188,20 @@ export default function ChatPageClient() {
         timestamp: 'الآن',
         mode: data.conversation.mode,
       };
-      setConversations([newConv]);
+      // Preserve existing conversations by adding new one to the beginning
+      setConversations(prev => [newConv, ...prev]);
       setActiveConvId(conversationId);
       // Save to localStorage for persistence
       if (user?.id) {
         localStorage.setItem(`lastConvId_${user.id}`, conversationId);
       }
       setMessages([]);
+      router.push(`/chat-page?id=${conversationId}`);
       console.debug('Conversation created successfully:', conversationId);
       return conversationId;
     } catch (error) {
       console.error('Error creating conversation:', error);
-      // Fallback to local state
+      // Fallback to local state - preserve existing conversations
       const newId = `conv-${Date.now()}`;
       const newConv: Conversation = {
         id: newId,
@@ -237,9 +210,10 @@ export default function ChatPageClient() {
         timestamp: 'الآن',
         mode: activeMode,
       };
-      setConversations([newConv]);
+      setConversations(prev => [newConv, ...prev]);
       setActiveConvId(newId);
       setMessages([]);
+      router.push(`/chat-page?id=${newId}`);
       console.debug('Using fallback conversation ID:', newId);
       return newId;
     }
@@ -247,6 +221,7 @@ export default function ChatPageClient() {
 
   const handleSelectConversation = (conversationId: string) => {
     setActiveConvId(conversationId);
+    router.push(`/chat-page?id=${conversationId}`);
     // Save to localStorage for persistence
     if (user?.id) {
       localStorage.setItem(`lastConvId_${user.id}`, conversationId);
@@ -293,8 +268,9 @@ export default function ChatPageClient() {
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         conversations={conversations}
+        setConversations={setConversations}
         activeConvId={activeConvId}
-        onSelectConversation={handleSelectConversation}
+        setActiveConvId={setActiveConvId}
         theme={theme}
         onThemeToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         botName={botName}

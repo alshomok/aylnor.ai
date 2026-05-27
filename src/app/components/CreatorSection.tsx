@@ -7,7 +7,7 @@ const techStack = [
   { id: 'tech-typescript', label: 'TypeScript', icon: Code2, color: 'text-blue-400' },
   { id: 'tech-python', label: 'Python 3.12', icon: Code2, color: 'text-yellow-400' },
   { id: 'tech-tailwind', label: 'Tailwind CSS', icon: Layers, color: 'text-cyan-400' },
-  { id: 'tech-openai', label: 'OpenAI API', icon: Cpu, color: 'text-green-400' },
+  { id: 'tech-gemini', label: 'Gemini & Groq APIs', icon: Cpu, color: 'text-purple-400' },
   { id: 'tech-postgres', label: 'PostgreSQL', icon: Database, color: 'text-blue-300' },
   { id: 'tech-redis', label: 'Redis', icon: Database, color: 'text-red-400' },
 ];
@@ -25,13 +25,8 @@ export default function CreatorSection() {
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-4">
               تم تطويره بواسطة الطالب المهندس: <span className="text-gold">أحمد قريز</span>
             </h2>
-            <p className="text-muted-foreground text-base leading-relaxed mb-6">
-              تم إنشاء aylnor.ai بواسطة الطالب المهندس أحمد قريز، مطور full-stack وخريج علوم حاسوب.
-              الرؤية: مساعد ذكي واحد يفهم السياق الأكاديمي وتحديات البرمجة الواقعية.
-            </p>
             <p className="text-muted-foreground text-base leading-relaxed mb-8">
-              كل ميزة — من أوضاع البوت إلى ذاكرة المحادثات — صُممت حول سير عمل الطلاب والمطورين
-              الفعليين، واختُبرت عبر مئات الجلسات قبل الإطلاق.
+              تم إنشاء aylnor.ai كشغف شخصي ورؤية هندسية مدفوعة بالفضول وحب الابتكار، ليغير طريقة تعامل الطلاب والمطورين مع الذكاء الاصطناعي. لم يُبْنَ هذا المشروع كواجب تقليدي، بل ليكون نظاماً متكاملاً يفهم السياق الأكاديمي والبرمجي الفعلي، ويقدم حلولاً ذكية ومطورة بأحدث تقنيات الويب والـ Agentic AI لتناسب سير عملك اليومي.
             </p>
           </div>
 
