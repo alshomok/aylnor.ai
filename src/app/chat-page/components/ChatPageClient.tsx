@@ -158,27 +158,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
   }, [user?.id, router, isLoading]);
 
-  // Fetch conversations when component mounts or user changes
-  useEffect(() => {
-    const fetchConversations = async () => {
-      if (!user?.id) return;
-
-      try {
-        const response = await fetch(`/api/conversations?userId=${user.id}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.conversations) {
-            setConversations(data.conversations);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching conversations:', error);
-      }
-    };
-
-    fetchConversations();
-  }, [user?.id]);
-
   const createNewConversation = async (): Promise<string | null> => {
     if (!user?.id) {
       console.warn('No user ID available');
@@ -280,7 +259,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       dir="rtl"
     >
       <ChatMain
-        key={chatId}
         messages={messages}
         setMessages={setMessages}
         activeMode={activeMode}

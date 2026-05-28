@@ -6,6 +6,7 @@ CREATE TABLE users (
   bot_name TEXT DEFAULT 'aylnor',
   bot_personality TEXT DEFAULT 'مساعد مفيد ودقيق وأكاديمي',
   theme TEXT DEFAULT 'dark',
+  ip_address TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -42,6 +43,22 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
+-- Create RLS policies for users table
+-- Allow service role to insert users (for trigger)
+CREATE POLICY "Allow service role to insert users" ON users
+  FOR INSERT
+  WITH CHECK (auth.role() = 'service_role');
+
+-- Allow users to view their own data
+CREATE POLICY "Users can view own data" ON users
+  FOR SELECT
+  USING (auth.uid() = id);
+
+-- Allow users to update their own data
+CREATE POLICY "Users can update own data" ON users
+  FOR UPDATE
+  USING (auth.uid() = id);
+
 -- Create function to handle new user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -63,13 +80,38 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 -- Fix: Drop existing policies and recreate with proper checks
 DROP POLICY IF EXISTS "Users can create their conversations" ON conversations;
 DROP POLICY IF EXISTS "Users can create messages in their conversations" ON messages;
+DROP POLICY IF EXISTS "Users can view their conversations" ON conversations;
+DROP POLICY IF EXISTS "Users can view messages in their conversations" ON messages;
+
 CREATE POLICY "Users can create their conversations" ON conversations
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+CREATE POLICY "Users can view their conversations" ON conversations
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their conversations" ON conversations
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their conversations" ON conversations
+  FOR DELETE
+  USING (auth.uid() = user_id);
+
 CREATE POLICY "Users can create messages in their conversations" ON messages
   FOR INSERT
   WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM conversations
+      WHERE conversations.id = messages.conversation_id
+      AND conversations.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can view messages in their conversations" ON messages
+  FOR SELECT
+  USING (
     EXISTS (
       SELECT 1 FROM conversations
       WHERE conversations.id = messages.conversation_id

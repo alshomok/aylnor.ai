@@ -11,11 +11,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing userId parameter' }, { status: 400 });
     }
 
-    if (!supabase) {
-      return NextResponse.json({ error: 'Supabase client not initialized' }, { status: 500 });
+    const supabaseServerInstance = supabaseServer();
+    if (!supabaseServerInstance) {
+      return NextResponse.json({ error: 'Supabase server client not initialized' }, { status: 500 });
     }
 
-    const { data: conversations, error } = await supabase
+    const { data: conversations, error } = await supabaseServerInstance
       .from('conversations')
       .select('*')
       .eq('user_id', userId)

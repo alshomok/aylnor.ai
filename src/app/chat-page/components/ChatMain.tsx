@@ -136,6 +136,11 @@ export default function ChatMain({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  // Reset code block when conversation changes
+  useEffect(() => {
+    setActiveCodeBlock(messages.find((m) => m.codeBlock)?.codeBlock ?? null);
+  }, [activeConvId, messages]);
+
   // Debug: log button state
   useEffect(() => {
     console.debug('Button state:', {
