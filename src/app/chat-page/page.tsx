@@ -46,8 +46,7 @@ function ChatContent() {
     return null;
   }
 
-  // Force component remounting using key attribute
-  return <ChatPageClient key={chatId} chatId={chatId} />;
+  return <ChatPageClient chatId={chatId} />;
 }
 
 export default function ChatPage() {

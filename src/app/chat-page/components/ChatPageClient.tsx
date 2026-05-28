@@ -211,6 +211,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         localStorage.setItem(`lastConvId_${user.id}`, conversationId);
       }
       router.push(`/chat-page?id=${conversationId}`);
+      router.refresh();
       console.debug('Conversation created successfully:', conversationId);
       return conversationId;
     } catch (error) {
@@ -259,6 +260,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       dir="rtl"
     >
       <ChatMain
+        key={chatId}
         messages={messages}
         setMessages={setMessages}
         activeMode={activeMode}
