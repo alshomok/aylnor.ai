@@ -1,17 +1,17 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ChatPageClient from './components/ChatPageClient';
 import { useAuth } from '@/contexts/auth-context';
 
-export default function ChatPage() {
+function ChatContent() {
   const { user, loading, checkIpLogin } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [ipChecked, setIpChecked] = useState(false);
 
   // Extract chatId from searchParams at page level
-  const chatId = searchParams?.id || '';
+  const chatId = searchParams.get('id') || '';
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -48,4 +48,12 @@ export default function ChatPage() {
 
   // Force component remounting using key attribute
   return <ChatPageClient key={chatId} chatId={chatId} />;
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen w-full items-center justify-center bg-zinc-950 text-amber-500">جاري تحميل المحادثة...</div>}>
+      <ChatContent />
+    </Suspense>
+  );
 }

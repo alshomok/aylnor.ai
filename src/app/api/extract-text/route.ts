@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // @ts-ignore
 import pdf from 'pdf-parse';
 import mammoth from 'mammoth';
+// @ts-ignore
 import xlsx from 'xlsx';
 
 export const runtime = 'nodejs';
