@@ -120,7 +120,7 @@ export default function ChatSidebar({
     };
 
     fetchConversations();
-  }, [user?.id, setConversations]);
+  }, [user?.id]);
 
   // Sync active conversation with URL query parameter
   useEffect(() => {
