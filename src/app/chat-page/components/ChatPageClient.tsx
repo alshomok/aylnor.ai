@@ -33,16 +33,19 @@ export interface Conversation {
   mode: BotMode;
 }
 
-export default function ChatPageClient() {
+interface ChatPageClientProps {
+  chatId: string;
+}
+
+export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   const { user, onAuthStateChange } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [theme, setTheme] = useState<Theme>('dark');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeMode, setActiveMode] = useState<BotMode>('thoughtful');
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConvId, setActiveConvId] = useState<string>('');
+  const [activeConvId, setActiveConvId] = useState<string>(chatId);
   const [showCodePanel, setShowCodePanel] = useState(true);
   const [botName, setBotName] = useState('aylnor');
   const [botPersonality, setBotPersonality] = useState('مساعد مفيد ودقيق وأكاديمي');
@@ -63,20 +66,15 @@ export default function ChatPageClient() {
     }
   }, [user]);
 
-  // Sync active conversation with URL query parameter
+  // Sync activeConvId with chatId prop (from URL)
   useEffect(() => {
-    const conversationId = searchParams.get('id');
-    if (conversationId) {
-      setActiveConvId(conversationId);
-    } else {
-      setActiveConvId('');
-    }
-  }, [searchParams]);
+    setActiveConvId(chatId);
+  }, [chatId]);
 
-  // Strict useEffect for message loading - only depends on activeConvId
+  // Strict useEffect for message loading - only depends on chatId
   useEffect(() => {
-    async function loadMessages() {
-      if (!activeConvId) {
+    async function fetchChatMessages() {
+      if (!chatId) {
         setMessages([]); // Only clear when no chat is active
         return;
       }
@@ -85,7 +83,7 @@ export default function ChatPageClient() {
       setIsMessagesLoading(true);
 
       try {
-        const response = await fetch(`/api/messages?conversationId=${activeConvId}`);
+        const response = await fetch(`/api/messages?conversationId=${chatId}`);
         if (response.ok) {
           const data = await response.json();
           if (data.messages) {
@@ -110,8 +108,8 @@ export default function ChatPageClient() {
       }
     }
 
-    loadMessages();
-  }, [activeConvId]); // Only dependency is activeConvId
+    fetchChatMessages();
+  }, [chatId]); // Only dependency is chatId
 
   // Register auth state change callback for historical data hydration
   useEffect(() => {

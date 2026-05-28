@@ -30,12 +30,16 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
     setIsLoading(true);
     setAuthError('');
 
-    const { error } = await signUp(data.email, data.password, data.fullName);
+    const { error, session } = await signUp(data.email, data.password, data.fullName);
 
     if (error) {
       setAuthError(error.message || 'فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.');
       setIsLoading(false);
+    } else if (session) {
+      // Auto-login successful - redirect to chat page immediately
+      window.location.href = '/chat-page';
     } else {
+      // Email confirmation required - show success message
       setIsLoading(false);
       setSuccess(true);
     }

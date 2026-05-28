@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: AuthError | null; session: Session | null }>;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   checkIpLogin: () => Promise<boolean>;
@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string) => {
     if (!supabase) {
-      return { error: { message: 'Supabase not initialized' } as AuthError };
+      return { error: { message: 'Supabase not initialized' } as AuthError, session: null };
     }
 
     try {
@@ -82,10 +82,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // User profile is created automatically by database trigger
-      return { error };
+      return { error, session: data?.session || null };
     } catch (err) {
       console.error('Unexpected signup error:', err);
-      return { error: { message: 'An unexpected error occurred during signup' } as AuthError };
+      return { error: { message: 'An unexpected error occurred during signup' } as AuthError, session: null };
     }
   };
 
@@ -152,16 +152,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     if (supabase) {
-      // Clear all localStorage items related to the current user
+      // Clear all localStorage items related to the current user's conversations
       if (user?.id) {
         localStorage.removeItem(`lastConvId_${user.id}`);
       }
       
-      // Clear all app-specific localStorage items to prevent data leaks
+      // Clear all conversation-related localStorage items to prevent data leaks
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && (key.startsWith('lastConvId_') || key === 'theme' || key === 'sidebarOpen')) {
+        if (key && key.startsWith('lastConvId_')) {
           keysToRemove.push(key);
         }
       }

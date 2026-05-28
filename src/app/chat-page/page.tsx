@@ -1,13 +1,17 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ChatPageClient from './components/ChatPageClient';
 import { useAuth } from '@/contexts/auth-context';
 
 export default function ChatPage() {
   const { user, loading, checkIpLogin } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [ipChecked, setIpChecked] = useState(false);
+
+  // Extract chatId from searchParams at page level
+  const chatId = searchParams?.id || '';
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -42,5 +46,6 @@ export default function ChatPage() {
     return null;
   }
 
-  return <ChatPageClient />;
+  // Force component remounting using key attribute
+  return <ChatPageClient key={chatId} chatId={chatId} />;
 }
