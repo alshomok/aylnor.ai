@@ -74,6 +74,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   // Strict useEffect for message loading - only depends on chatId
   useEffect(() => {
     async function fetchChatMessages() {
+      console.debug('Fetching messages for chatId:', chatId);
       if (!chatId) {
         setMessages([]); // Only clear when no chat is active
         return;
@@ -98,6 +99,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
               }),
               codeBlock: msg.code_block,
             }));
+            console.debug('Loaded messages:', formattedMessages.length);
             setMessages(formattedMessages); // Update ONLY when data is fetched
           }
         }
@@ -259,7 +261,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       dir="rtl"
     >
       <ChatMain
-        key={chatId}
         messages={messages}
         setMessages={setMessages}
         activeMode={activeMode}
