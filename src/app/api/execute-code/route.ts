@@ -5,7 +5,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { language, code, options = {} } = body;
 
+    console.debug('Code execution request:', { language, codeLength: code?.length });
+
     if (!language || !code) {
+      console.error('Missing language or code');
       return NextResponse.json({ error: 'Missing language or code' }, { status: 400 });
     }
 
@@ -22,37 +25,47 @@ export async function POST(request: NextRequest) {
 
     const langConfig = languageMap[language.toLowerCase()];
     if (!langConfig) {
+      console.error('Unsupported language:', language);
       return NextResponse.json({ error: 'Unsupported language' }, { status: 400 });
     }
 
+    console.debug('Language config:', langConfig);
+
     // Call Piston API
+    const requestBody = {
+      language: langConfig.language,
+      version: langConfig.version,
+      files: [
+        {
+          name: language === 'java' ? 'Main.java' : `main.${language}`,
+          content: code,
+        },
+      ],
+      compile_timeout: 10000,
+      run_timeout: 5000,
+      memory_limit: 128,
+    };
+
+    console.debug('Piston API request:', requestBody);
+
     const pistonResponse = await fetch('https://emkc.org/api/v2/piston/execute', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        language: langConfig.language,
-        version: langConfig.version,
-        files: [
-          {
-            name: language === 'java' ? 'Main.java' : `main.${language}`,
-            content: code,
-          },
-        ],
-        compile_timeout: 10000,
-        run_timeout: 5000,
-        memory_limit: 128,
-      }),
+      body: JSON.stringify(requestBody),
     });
+
+    console.debug('Piston API response status:', pistonResponse.status);
 
     if (!pistonResponse.ok) {
       const errorData = await pistonResponse.text();
-      console.error('Piston API error:', errorData);
-      return NextResponse.json({ error: 'Failed to execute code' }, { status: 500 });
+      console.error('Piston API error:', pistonResponse.status, errorData);
+      return NextResponse.json({ error: 'Failed to execute code', details: errorData }, { status: 500 });
     }
 
     const result = await pistonResponse.json();
+    console.debug('Piston API result:', result);
 
     return NextResponse.json({
       success: true,
@@ -63,6 +76,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Code execution error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error', details: String(error) }, { status: 500 });
   }
 }

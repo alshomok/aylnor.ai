@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Copy, Check, AlertTriangle, ExternalLink } from 'lucide-react';
+import InteractiveInput from './InteractiveInput';
 
 interface CodeExecutionProps {
   code: string;
@@ -21,6 +22,9 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [showOutput, setShowOutput] = useState(false);
+  const [showInput, setShowInput] = useState(false);
+  const [inputPrompt, setInputPrompt] = useState('');
+  const [inputCallback, setInputCallback] = useState<((value: string) => void) | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pyodideRef = useRef<any>(null);
 
@@ -28,6 +32,23 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
     await navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleInput = (value: string) => {
+    setShowInput(false);
+    if (inputCallback) {
+      inputCallback(value);
+      setInputCallback(null);
+    }
+  };
+
+  const handleCloseInput = () => {
+    setShowInput(false);
+    setInputCallback(null);
+    if (inputCallback) {
+      inputCallback('');
+      setInputCallback(null);
+    }
   };
 
   const executeCode = async () => {
@@ -69,6 +90,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
         console.log('Executing JavaScript/TypeScript code');
         const consoleOutput: string[] = [];
         const originalConsole = { ...console };
+        const originalPrompt = (window as any).prompt;
 
         // Override console methods to capture output
         console.log = (...args: any[]) => {
@@ -90,6 +112,17 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
             typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
           ).join(' '));
           originalConsole.warn(...args);
+        };
+
+        // Override prompt to show interactive dialog
+        (window as any).prompt = (message?: string, _default?: string) => {
+          return new Promise((resolve) => {
+            setInputPrompt(message || 'أدخل قيمة:');
+            setInputCallback(() => (value: string) => {
+              resolve(value);
+            });
+            setShowInput(true);
+          });
         };
 
         try {
@@ -115,8 +148,9 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
           console.error('JS execution error:', e);
           setError(e instanceof Error ? e.message : String(e));
         } finally {
-          // Restore console
+          // Restore console and prompt
           Object.assign(console, originalConsole);
+          (window as any).prompt = originalPrompt;
         }
         setIsExecuting(false);
         return;
@@ -143,6 +177,19 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
           }
 
           const pyodide = pyodideRef.current;
+          
+          // Override input() to show interactive dialog
+          pyodide.setStdin({
+            stdin: () => {
+              return new Promise((resolve) => {
+                setInputPrompt('أدخل قيمة:');
+                setInputCallback(() => (value: string) => {
+                  resolve(value + '\n');
+                });
+                setShowInput(true);
+              });
+            }
+          });
           
           // Capture stdout
           pyodide.setStdout({
@@ -295,6 +342,15 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
           Server-side execution • Powered by Piston API
         </p>
       </div>
+
+      {/* Interactive Input Dialog */}
+      {showInput && (
+        <InteractiveInput
+          onInput={handleInput}
+          onClose={handleCloseInput}
+          placeholder={inputPrompt}
+        />
+      )}
     </div>
   );
 }
