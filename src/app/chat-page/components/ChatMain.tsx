@@ -126,6 +126,7 @@ export default function ChatMain({
   const [activeCodeBlock, setActiveCodeBlock] = useState<{ language: string; code: string } | null>(
     messages.find((m) => m.codeBlock)?.codeBlock ?? null
   );
+  const [renderKey, setRenderKey] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -136,9 +137,19 @@ export default function ChatMain({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Reset code block when conversation changes
+  // Force re-render when messages prop changes
   useEffect(() => {
+    console.debug('Messages prop changed:', messages.length);
+    // Force a re-render by updating a dummy state
+    setRenderKey(prev => prev + 1);
+  }, [messages]);
+
+  // Reset internal state when conversation changes
+  useEffect(() => {
+    console.debug('Conversation changed, resetting state:', activeConvId);
+    console.debug('Messages prop updated:', messages.length, messages);
     setActiveCodeBlock(messages.find((m) => m.codeBlock)?.codeBlock ?? null);
+    setIsTyping(false);
   }, [activeConvId, messages]);
 
   // Debug: log button state
@@ -468,7 +479,7 @@ export default function ChatMain({
         </div>
 
         {/* Messages - hidden on mobile when code tab is active */}
-        <div className={`flex-1 overflow-y-auto scrollbar-thin px-3 sm:px-4 py-6 space-y-5 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
+        <div key={renderKey} className={`flex-1 overflow-y-auto scrollbar-thin px-3 sm:px-4 py-6 space-y-5 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
           {messages.map((msg) => (
             <div
               key={msg.id}
