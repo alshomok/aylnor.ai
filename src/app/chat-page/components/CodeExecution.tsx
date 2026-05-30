@@ -171,19 +171,37 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
         return;
       }
 
-      // Handle C and C++ with Godbolt Compiler Explorer (embed)
+      // Handle C and C++ with server-side API
       if (langKey === 'c' || langKey === 'cpp' || langKey === 'c++') {
-        console.log('Executing C/C++ code');
-        const godboltLang = langKey === 'c' ? 'c' : 'cpp';
-        const encodedCode = encodeURIComponent(code);
-        // Use embed URL instead of API
-        const godboltUrl = `https://godbolt.org/e#${godboltLang}`;
-        
-        // Open Godbolt in new tab with code
-        window.open(`https://godbolt.org/z/${encodedCode}`, '_blank');
-        
-        setOutput('Code opened in Godbolt Compiler Explorer in new tab for execution.');
-        setShowOutput(true);
+        console.log('Executing C/C++ code via server API');
+        try {
+          const response = await fetch('/api/execute-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              language: langKey === 'c' ? 'cpp' : 'cpp',
+              code: code,
+              options: {}
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to execute code');
+          }
+
+          const result = await response.json();
+          
+          if (result.errors) {
+            setError(result.errors);
+          }
+          
+          setOutput(result.output || 'Code executed successfully (no output)');
+          setShowOutput(true);
+        } catch (e) {
+          console.error('C/C++ execution error:', e);
+          setError(e instanceof Error ? e.message : String(e));
+        }
         setIsExecuting(false);
         return;
       }
@@ -274,7 +292,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
       {/* Info */}
       <div className="px-4 py-2 bg-muted/50 border-t border-border">
         <p className="text-xs text-muted-foreground">
-          Client-side execution • No server required
+          Server-side execution • Powered by Piston API
         </p>
       </div>
     </div>

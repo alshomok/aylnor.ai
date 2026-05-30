@@ -13,6 +13,11 @@ function ChatContent() {
   // Extract chatId from searchParams at page level
   const chatId = searchParams.get('id') || '';
 
+  // Log chatId changes
+  useEffect(() => {
+    console.debug('Page chatId changed:', chatId);
+  }, [chatId]);
+
   useEffect(() => {
     const checkAuth = async () => {
       if (!loading && !user) {
@@ -46,6 +51,7 @@ function ChatContent() {
     return null;
   }
 
+  console.debug('Rendering ChatPageClient with chatId:', chatId);
   return <ChatPageClient chatId={chatId} />;
 }
 

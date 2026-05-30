@@ -57,6 +57,11 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   const themeClass = theme === 'light' ? 'light' : '';
 
+  // Log chatId prop changes
+  useEffect(() => {
+    console.debug('ChatPageClient chatId prop changed:', chatId);
+  }, [chatId]);
+
   // Load user data from Supabase Auth
   useEffect(() => {
     if (user?.user_metadata?.full_name) {
@@ -261,7 +266,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       dir="rtl"
     >
       <ChatMain
-        key={chatId}
+        key={activeConvId}
         messages={messages}
         setMessages={setMessages}
         activeMode={activeMode}

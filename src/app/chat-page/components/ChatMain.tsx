@@ -144,6 +144,44 @@ export default function ChatMain({
     setRenderKey(prev => prev + 1);
   }, [messages]);
 
+  // Fetch messages when activeConvId changes
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!activeConvId) {
+        console.debug('No activeConvId, clearing messages');
+        setMessages([]);
+        return;
+      }
+
+      console.debug('Fetching messages for activeConvId:', activeConvId);
+      try {
+        const response = await fetch(`/api/messages?conversationId=${activeConvId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.messages) {
+            const formattedMessages: Message[] = data.messages.map((msg: any) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              mode: msg.mode,
+              timestamp: new Date(msg.created_at).toLocaleTimeString('ar-SA', {
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+              codeBlock: msg.code_block,
+            }));
+            console.debug('Loaded messages in ChatMain:', formattedMessages.length);
+            setMessages(formattedMessages);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading messages in ChatMain:', error);
+      }
+    };
+
+    fetchMessages();
+  }, [activeConvId]);
+
   // Reset internal state when conversation changes
   useEffect(() => {
     console.debug('Conversation changed, resetting state:', activeConvId);
