@@ -1,13 +1,15 @@
 @import './tailwind.css';
 
 /* Force LTR direction on all code blocks to prevent RTL reversal */
-pre, code, .code-block {
+pre, code, .code-block, pre *, code * {
   direction: ltr !important;
   text-align: left !important;
 }
 
-/* Force LTR direction on terminal output */
-pre[class*="bg-black"], pre[class*="bg-red-950"], .terminal-output, .output-console {
+/* Force LTR direction on terminal output with bidi-override */
+pre[class*="bg-black"], pre[class*="bg-red-950"], .terminal-output, .output-console,
+pre[class*="bg-black"] *, pre[class*="bg-red-950"] *, .terminal-output *, .output-console * {
   direction: ltr !important;
   text-align: left !important;
+  unicode-bidi: bidi-override !important;
 }

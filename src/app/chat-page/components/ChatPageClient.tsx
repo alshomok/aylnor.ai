@@ -99,8 +99,10 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         const response = await fetch(`/api/messages?conversationId=${chatId}`);
         if (response.ok) {
           const data = await response.json();
-          if (data.messages && isMounted) {
-            const formattedMessages: Message[] = data.messages.map((msg: any) => ({
+          if (isMounted) {
+            // Safe handling for empty or undefined messages array
+            const messagesArray = Array.isArray(data.messages) ? data.messages : [];
+            const formattedMessages: Message[] = messagesArray.map((msg: any) => ({
               id: msg.id,
               role: msg.role,
               content: msg.content,
@@ -117,6 +119,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         }
       } catch (error) {
         console.error('Error loading messages:', error);
+        if (isMounted) {
+          setMessages([]); // Set empty array on error to prevent crash
+        }
       } finally {
         if (isMounted) {
           setIsMessagesLoading(false);
