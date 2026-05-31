@@ -210,9 +210,18 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
           if (!output && !error) {
             setOutput('Code executed successfully (no output)');
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error('Python execution error:', e);
-          setError(e instanceof Error ? e.message : String(e));
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          
+          // Check for common unsupported packages
+          if (errorMessage.includes('ModuleNotFoundError')) {
+            const match = errorMessage.match(/No module named '([^']+)'/);
+            const moduleName = match ? match[1] : 'unknown';
+            setError(`المكتبة "${moduleName}" غير مدعومة في بيئة Pyodide. المكتبات الرسومية مثل pygame, tkinter غير مدعومة. استخدم مكتبات قياسية مثل math, random, datetime.`);
+          } else {
+            setError(errorMessage);
+          }
         }
         setIsExecuting(false);
         return;

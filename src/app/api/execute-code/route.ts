@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
       rust: { language: 'rust', version: '1.68.2' },
       go: { language: 'go', version: '1.20.5' },
       typescript: { language: 'typescript', version: '5.0.3' },
+      c: { language: 'c', version: '10.2.0' },
     };
 
     const langConfig = languageMap[language.toLowerCase()];

@@ -266,7 +266,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       dir="rtl"
     >
       <ChatMain
-        key={activeConvId}
         messages={messages}
         setMessages={setMessages}
         activeMode={activeMode}

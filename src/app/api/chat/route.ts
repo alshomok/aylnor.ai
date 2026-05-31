@@ -325,17 +325,20 @@ export async function POST(request: NextRequest) {
           // Sort by score (highest first)
           scoredFiles.sort((a, b) => b.score - a.score);
 
-          // Get the best matching file
-          const bestMatch = scoredFiles[0];
-          educationalFile = bestMatch.file;
-          const downloadLink = `https://drive.google.com/uc?export=download&id=${educationalFile.drive_id}`;
+          // Get all matching files (not just the best match)
+          const matchingFiles = scoredFiles.map(item => item.file);
           
-          console.log('Best match file:', educationalFile.title);
-          console.log('Best match score:', bestMatch.score);
-          console.log('Download link:', downloadLink);
+          console.log('Number of matching files:', matchingFiles.length);
+          console.log('Matching files:', matchingFiles.map(f => f.title));
           
-          // Add to context with CRITICAL instruction to provide download link
-          fileContext += `\n\n---\n🎯 ملف تعليمي مطابق من Google Drive:\nالعنوان: ${educationalFile.title}\nالوصف: ${educationalFile.description || 'لا يوجد وصف'}\n\n📥 رابط التحميل المباشر: ${downloadLink}\n\n⚠️ تعليمات حرجة: الطالب يطلب ملفاً محدداً وجدناه في قاعدة البيانات. يجب عليك تقديم رابط التحميل فوراً بصيغة Markdown: [${educationalFile.title}](${downloadLink}). لا تشرح الموضوع ولا تولد أي كود أو شروحات عامة إلا إذا طلب الطالب ذلك صراحة. الأولوية القصوى هي تقديم رابط التحميل.\n---`;
+          // Add all matching files to context
+          fileContext += `\n\n---\n🎯 ملفات تعليمية مطابقة من Google Drive:\n`;
+          matchingFiles.forEach((file, index) => {
+            const downloadLink = `https://drive.google.com/uc?export=download&id=${file.drive_id}`;
+            fileContext += `\n${index + 1}. العنوان: ${file.title}\n   الوصف: ${file.description || 'لا يوجد وصف'}\n   📥 رابط التحميل: ${downloadLink}\n`;
+          });
+          
+          fileContext += `\n⚠️ تعليمات حرجة: الطالب يطلب ملفاً محدداً وجدنا ${matchingFiles.length} ملفات مطابقة في قاعدة البيانات. يجب عليك تقديم روابط التحميل لجميع الملفات المذكورة أعلاه بصيغة Markdown. لا تشرح الموضوع ولا تولد أي كود أو شروحات عامة إلا إذا طلب الطالب ذلك صراحة. الأولوية القصوى هي تقديم روابط التحميل لجميع الملفات المتاحة.\n---`;
         } else {
           console.log('No files found in database');
         }
