@@ -67,12 +67,72 @@ const GUIDANCE_ITEMS = [
 export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPanelProps) {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'code' | 'output' | 'guide'>('code');
+  const [isRunning, setIsRunning] = useState(false);
+  const [executionOutput, setExecutionOutput] = useState('');
+  const [executionError, setExecutionError] = useState('');
 
   const handleCopy = () => {
     if (!codeBlock) return;
     navigator.clipboard.writeText(codeBlock.code).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRunCode = async () => {
+    if (!codeBlock) return;
+    setIsRunning(true);
+    setExecutionOutput('');
+    setExecutionError('');
+
+    try {
+      // Map language names for Piston API
+      const languageMap: Record<string, string> = {
+        python: 'python3',
+        javascript: 'javascript',
+        typescript: 'javascript',
+        cpp: 'cpp',
+        c: 'c',
+        java: 'java',
+        go: 'go',
+        rust: 'rust',
+        php: 'php',
+        ruby: 'ruby',
+        bash: 'bash',
+        sql: 'sqlite3',
+      };
+
+      const pistonLanguage = languageMap[codeBlock.language] || codeBlock.language;
+
+      const response = await fetch('https://emkc.org/api/v2/piston/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          language: pistonLanguage,
+          version: '*',
+          files: [{ content: codeBlock.code }],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to execute code');
+      }
+
+      const result = await response.json();
+      
+      if (result.run?.output) {
+        setExecutionOutput(result.run.output);
+      }
+      
+      if (result.run?.stderr || result.compile?.stderr) {
+        setExecutionError(result.run?.stderr || result.compile?.stderr || '');
+      }
+    } catch (error) {
+      setExecutionError(error instanceof Error ? error.message : 'Failed to execute code');
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   const handleDownload = () => {
@@ -116,6 +176,18 @@ export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPane
           )}
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={handleRunCode}
+            disabled={!codeBlock || isRunning}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="تشغيل الكود"
+          >
+            {isRunning ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+            ) : (
+              <Play size={14} />
+            )}
+          </button>
           <button
             onClick={handleCopy}
             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
@@ -192,6 +264,26 @@ export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPane
                     <code>{codeBlock.code}</code>
                   </pre>
                 </div>
+                
+                {/* Execution Output Console */}
+                {(executionOutput || executionError) && (
+                  <div className="mt-2 px-4">
+                    <div className="flex items-center gap-2 mb-2 flex-row-reverse">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-xs font-semibold text-green-400">مخرجات التنفيذ</span>
+                    </div>
+                    <pre
+                      className="bg-black text-green-400 p-4 rounded-md font-mono text-sm overflow-x-auto border border-zinc-800"
+                      dir="ltr"
+                    >
+                      {executionError ? (
+                        <span className="text-red-400">{executionError}</span>
+                      ) : (
+                        executionOutput
+                      )}
+                    </pre>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full py-16 px-6 text-center">

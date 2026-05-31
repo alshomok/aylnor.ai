@@ -78,21 +78,27 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   // Strict useEffect for message loading - only depends on chatId
   useEffect(() => {
+    let isMounted = true;
+    
     async function fetchChatMessages() {
       console.debug('Fetching messages for chatId:', chatId);
       if (!chatId) {
-        setMessages([]); // Only clear when no chat is active
+        if (isMounted) {
+          setMessages([]); // Only clear when no chat is active
+        }
         return;
       }
 
       // Set loading state to avoid seeing old messages flicker
-      setIsMessagesLoading(true);
+      if (isMounted) {
+        setIsMessagesLoading(true);
+      }
 
       try {
         const response = await fetch(`/api/messages?conversationId=${chatId}`);
         if (response.ok) {
           const data = await response.json();
-          if (data.messages) {
+          if (data.messages && isMounted) {
             const formattedMessages: Message[] = data.messages.map((msg: any) => ({
               id: msg.id,
               role: msg.role,
@@ -105,17 +111,23 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
               codeBlock: msg.code_block,
             }));
             console.debug('Loaded messages:', formattedMessages.length);
-            setMessages(formattedMessages); // Update ONLY when data is fetched
+            setMessages(formattedMessages); // Update ONLY when data is fetched and component is mounted
           }
         }
       } catch (error) {
         console.error('Error loading messages:', error);
       } finally {
-        setIsMessagesLoading(false);
+        if (isMounted) {
+          setIsMessagesLoading(false);
+        }
       }
     }
 
     fetchChatMessages();
+    
+    return () => {
+      isMounted = false; // Prevents setting state on unmounted component during rapid switches
+    };
   }, [chatId]); // Only dependency is chatId
 
   // Register auth state change callback for historical data hydration
@@ -265,44 +277,84 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       className={`${themeClass} flex h-screen overflow-hidden bg-background text-foreground`}
       dir="rtl"
     >
-      <ChatMain
-        messages={messages}
-        setMessages={setMessages}
-        activeMode={activeMode}
-        setActiveMode={setActiveMode}
-        showCodePanel={showCodePanel}
-        setShowCodePanel={setShowCodePanel}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-        botName={botName}
-        activeConvId={activeConvId}
-        conversations={conversations}
-        setConversations={setConversations}
-        onCreateConversation={createNewConversation}
-        mobileSidebarOpen={mobileSidebarOpen}
-        onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-        mobileTab={mobileTab}
-        onMobileTabChange={setMobileTab}
-      />
-      <ChatSidebar
-        open={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
-        conversations={conversations}
-        setConversations={setConversations}
-        activeConvId={activeConvId}
-        setActiveConvId={setActiveConvId}
-        theme={theme}
-        onThemeToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        botName={botName}
-        onBotNameChange={setBotName}
-        botPersonality={botPersonality}
-        onBotPersonalityChange={setBotPersonality}
-        username={username}
-        onUsernameChange={setUsername}
-        onNewChat={createNewConversation}
-        mobileOpen={mobileSidebarOpen}
-        onMobileClose={() => setMobileSidebarOpen(false)}
-      />
+      {/* Mobile Sidebar Overlay */}
+      {mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile Sidebar Drawer */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-y-0 right-0 z-50 w-[80%] max-w-[300px] bg-[#0b121f] md:hidden">
+          <ChatSidebar
+            open={true}
+            onToggle={() => setMobileSidebarOpen(false)}
+            conversations={conversations}
+            setConversations={setConversations}
+            activeConvId={activeConvId}
+            setActiveConvId={setActiveConvId}
+            theme={theme}
+            onThemeToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            botName={botName}
+            onBotNameChange={setBotName}
+            botPersonality={botPersonality}
+            onBotPersonalityChange={setBotPersonality}
+            username={username}
+            onUsernameChange={setUsername}
+            onNewChat={createNewConversation}
+            mobileOpen={true}
+            onMobileClose={() => setMobileSidebarOpen(false)}
+          />
+        </div>
+      )}
+
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex md:w-64">
+        <ChatSidebar
+          open={sidebarOpen}
+          onToggle={() => setSidebarOpen(!sidebarOpen)}
+          conversations={conversations}
+          setConversations={setConversations}
+          activeConvId={activeConvId}
+          setActiveConvId={setActiveConvId}
+          theme={theme}
+          onThemeToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          botName={botName}
+          onBotNameChange={setBotName}
+          botPersonality={botPersonality}
+          onBotPersonalityChange={setBotPersonality}
+          username={username}
+          onUsernameChange={setUsername}
+          onNewChat={createNewConversation}
+          mobileOpen={false}
+          onMobileClose={() => {}}
+        />
+      </div>
+
+      {/* Chat Main Area */}
+      <div className="flex-1 flex flex-col h-full">
+        <ChatMain
+          messages={messages}
+          setMessages={setMessages}
+          activeMode={activeMode}
+          setActiveMode={setActiveMode}
+          showCodePanel={showCodePanel}
+          setShowCodePanel={setShowCodePanel}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          botName={botName}
+          activeConvId={activeConvId}
+          conversations={conversations}
+          setConversations={setConversations}
+          onCreateConversation={createNewConversation}
+          mobileSidebarOpen={mobileSidebarOpen}
+          onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+          mobileTab={mobileTab}
+          onMobileTabChange={setMobileTab}
+        />
+      </div>
     </div>
   );
 }
