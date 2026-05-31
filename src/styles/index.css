@@ -5,3 +5,9 @@ pre, code, .code-block {
   direction: ltr !important;
   text-align: left !important;
 }
+
+/* Force LTR direction on terminal output */
+pre[class*="bg-black"], pre[class*="bg-red-950"], .terminal-output, .output-console {
+  direction: ltr !important;
+  text-align: left !important;
+}

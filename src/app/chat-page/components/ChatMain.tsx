@@ -410,7 +410,7 @@ export default function ChatMain({
   return (
     <div className="flex flex-1 min-w-0 overflow-hidden">
       {/* Chat area */}
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-w-0 w-full">
         {/* Top bar */}
         <div className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-border bg-card shrink-0">
           <div className="flex items-center gap-2">
