@@ -89,8 +89,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         return;
       }
 
-      // Set loading state to avoid seeing old messages flicker
+      // Reset state to prevent mixing old and new messages
       if (isMounted) {
+        setMessages([]);
         setIsMessagesLoading(true);
       }
 
@@ -336,6 +337,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       {/* Chat Main Area */}
       <div className="flex-1 flex flex-col h-full">
         <ChatMain
+          key={chatId}
           messages={messages}
           setMessages={setMessages}
           activeMode={activeMode}

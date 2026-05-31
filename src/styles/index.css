@@ -1,1 +1,7 @@
 @import './tailwind.css';
+
+/* Force LTR direction on all code blocks to prevent RTL reversal */
+pre, code, .code-block {
+  direction: ltr !important;
+  text-align: left !important;
+}

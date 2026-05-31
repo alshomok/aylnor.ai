@@ -554,10 +554,10 @@ export default function ChatMain({
                         </button>
                       </div>
                       <pre
-                        className="code-block bg-black/40 rounded-lg p-3 text-xs overflow-x-auto max-h-40 text-green-300 text-left"
+                        className="code-block bg-black/40 rounded-lg p-3 text-xs overflow-x-auto max-h-40 text-green-300 text-left font-mono"
                         dir="ltr"
                       >
-                        <code>
+                        <code className="text-left">
                           {msg.codeBlock.code.slice(0, 300)}
                           {msg.codeBlock.code.length > 300 ? '\n…' : ''}
                         </code>

@@ -260,8 +260,8 @@ export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPane
                     ))}
                   </div>
                   {/* Code content */}
-                  <pre className="code-block flex-1 px-4 py-4 text-xs overflow-x-auto text-green-300 leading-6">
-                    <code>{codeBlock.code}</code>
+                  <pre className="code-block flex-1 px-4 py-4 text-xs overflow-x-auto text-green-300 leading-6 font-mono text-left" dir="ltr">
+                    <code className="text-left">{codeBlock.code}</code>
                   </pre>
                 </div>
                 
