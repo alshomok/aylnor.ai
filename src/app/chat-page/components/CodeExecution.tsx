@@ -25,6 +25,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
   const [showInput, setShowInput] = useState(false);
   const [inputPrompt, setInputPrompt] = useState('');
   const [inputCallback, setInputCallback] = useState<((value: string) => void) | null>(null);
+  const [stdin, setStdin] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pyodideRef = useRef<any>(null);
 
@@ -231,13 +232,13 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
       if (langKey === 'c' || langKey === 'cpp' || langKey === 'c++') {
         console.log('Executing C/C++ code via server API');
         try {
-          const response = await fetch('/api/execute-code', {
+          const response = await fetch('/api/run-code', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              language: langKey === 'c' ? 'cpp' : 'cpp',
               code: code,
-              options: {}
+              language: langKey === 'c' ? 'c' : 'cpp',
+              stdin: stdin || ''
             })
           });
 
@@ -248,11 +249,11 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
 
           const result = await response.json();
           
-          if (result.errors) {
-            setError(result.errors);
+          if (result.isError) {
+            setError(result.output);
+          } else {
+            setOutput(result.output || 'Code executed successfully (no output)');
           }
-          
-          setOutput(result.output || 'Code executed successfully (no output)');
           setShowOutput(true);
         } catch (e) {
           console.error('C/C++ execution error:', e);
@@ -314,9 +315,21 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
         </div>
       </div>
 
+      {/* Stdin Input Field */}
+      <div className="px-4 py-2 bg-muted/50 border-t border-border">
+        <label className="text-xs font-medium text-muted-foreground block mb-1">المدخلات (Inputs) - إن وجدت</label>
+        <textarea
+          value={stdin}
+          onChange={(e) => setStdin(e.target.value)}
+          placeholder="أدخل المدخلات هنا (مثل: 5 10 15)..."
+          className="w-full min-h-[60px] px-3 py-2 bg-muted border border-border rounded text-xs text-white placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 resize-none font-mono"
+          dir="ltr"
+        />
+      </div>
+
       {/* Output */}
       {(output || error) && (
-        <div className={`p-4 text-sm font-mono ${error ? 'bg-red-50 text-red-900' : 'bg-green-50 text-green-900'}`}>
+        <div className={`p-4 text-sm font-mono ${error ? 'bg-red-950/50 text-red-400' : 'bg-black text-green-400'}`}>
           {error && (
             <div className="flex items-start gap-2 mb-2">
               <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />

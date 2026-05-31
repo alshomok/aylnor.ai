@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
+const HUGGINGFACE_SPACE_ENDPOINT = 'https://a7mdl0u-aylnor-compiler.hf.space';
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { code, stdin } = body;
+    const { code, language, stdin } = body;
 
     if (!code) {
       return NextResponse.json(
@@ -14,51 +16,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const pistonResponse = await fetch('https://emkc.org/api/v2/piston/execute', {
+    if (!language) {
+      return NextResponse.json(
+        { error: 'Language is required', isError: true },
+        { status: 400 }
+      );
+    }
+
+    const hfResponse = await fetch(`${HUGGINGFACE_SPACE_ENDPOINT}/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        language: 'cpp',
-        version: '10.2.0',
-        files: [
-          {
-            content: code,
-          },
-        ],
+        code,
+        language,
         stdin: stdin || '',
       }),
     });
 
-    if (!pistonResponse.ok) {
-      const errorText = await pistonResponse.text();
-      console.error('Piston API error:', pistonResponse.status, errorText);
+    if (!hfResponse.ok) {
+      const errorText = await hfResponse.text();
+      console.error('Hugging Face Space error:', hfResponse.status, errorText);
       return NextResponse.json(
         { error: 'Failed to execute code', isError: true, details: errorText },
         { status: 500 }
       );
     }
 
-    const result = await pistonResponse.json();
+    const result = await hfResponse.json();
 
-    if (result.run?.stderr) {
+    if (result.success === true) {
+      const output = result.stdout + (result.stderr ? '\n' + result.stderr : '');
       return NextResponse.json({
-        output: result.run.stderr,
-        isError: true,
+        output: output || 'تم التنفيذ بنجاح',
+        isError: !!result.stderr,
       });
     }
 
-    if (result.compile?.stderr) {
+    if (result.success === false) {
       return NextResponse.json({
-        output: result.compile.stderr,
+        output: result.error || 'Execution failed',
         isError: true,
       });
     }
 
     return NextResponse.json({
-      output: result.run?.output || '',
-      isError: false,
+      output: 'Unknown response format',
+      isError: true,
     });
   } catch (error) {
     console.error('Code execution error:', error);

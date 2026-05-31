@@ -70,6 +70,7 @@ export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPane
   const [isRunning, setIsRunning] = useState(false);
   const [executionOutput, setExecutionOutput] = useState('');
   const [executionError, setExecutionError] = useState('');
+  const [stdin, setStdin] = useState('');
 
   const handleCopy = () => {
     if (!codeBlock) return;
@@ -85,12 +86,13 @@ export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPane
     setExecutionError('');
 
     try {
-      // Map language names for Piston API
+      // Map language names for Hugging Face Space
       const languageMap: Record<string, string> = {
-        python: 'python3',
+        python: 'python',
         javascript: 'javascript',
         typescript: 'javascript',
         cpp: 'cpp',
+        'c++': 'cpp',
         c: 'c',
         java: 'java',
         go: 'go',
@@ -98,20 +100,20 @@ export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPane
         php: 'php',
         ruby: 'ruby',
         bash: 'bash',
-        sql: 'sqlite3',
+        sql: 'sql',
       };
 
-      const pistonLanguage = languageMap[codeBlock.language] || codeBlock.language;
+      const mappedLanguage = languageMap[codeBlock.language] || codeBlock.language;
 
-      const response = await fetch('https://emkc.org/api/v2/piston/execute', {
+      const response = await fetch('/api/run-code', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          language: pistonLanguage,
-          version: '*',
-          files: [{ content: codeBlock.code }],
+          code: codeBlock.code,
+          language: mappedLanguage,
+          stdin: stdin || '',
         }),
       });
 
@@ -121,12 +123,10 @@ export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPane
 
       const result = await response.json();
       
-      if (result.run?.output) {
-        setExecutionOutput(result.run.output);
-      }
-      
-      if (result.run?.stderr || result.compile?.stderr) {
-        setExecutionError(result.run?.stderr || result.compile?.stderr || '');
+      if (result.isError) {
+        setExecutionError(result.output);
+      } else {
+        setExecutionOutput(result.output);
       }
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : 'Failed to execute code');
@@ -265,6 +265,21 @@ export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPane
                   </pre>
                 </div>
                 
+                {/* Stdin Input Field */}
+                <div className="mt-2 px-4">
+                  <label className="text-xs font-semibold text-muted-foreground flex items-center gap-2 mb-2 flex-row-reverse">
+                    <Terminal size={12} className="text-royal-blue-light" />
+                    المدخلات (Inputs) - إن وجدت
+                  </label>
+                  <textarea
+                    value={stdin}
+                    onChange={(e) => setStdin(e.target.value)}
+                    placeholder="أدخل المدخلات هنا (مثل: 5 10 15)..."
+                    className="w-full min-h-[60px] px-3 py-2 bg-muted/50 border border-border rounded-lg text-xs text-white placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-royal-blue/50 focus:border-royal-blue resize-none font-mono"
+                    dir="ltr"
+                  />
+                </div>
+
                 {/* Execution Output Console */}
                 {(executionOutput || executionError) && (
                   <div className="mt-2 px-4">
@@ -273,14 +288,14 @@ export default function CodeDisplayPanel({ codeBlock, onClose }: CodeDisplayPane
                       <span className="text-xs font-semibold text-green-400">مخرجات التنفيذ</span>
                     </div>
                     <pre
-                      className="bg-black text-green-400 p-4 rounded-md font-mono text-sm overflow-x-auto border border-zinc-800"
+                      className={`p-4 rounded-md font-mono text-sm overflow-x-auto border ${
+                        executionError
+                          ? 'bg-red-950/50 text-red-400 border-red-900/50'
+                          : 'bg-black text-green-400 border-zinc-800'
+                      }`}
                       dir="ltr"
                     >
-                      {executionError ? (
-                        <span className="text-red-400">{executionError}</span>
-                      ) : (
-                        executionOutput
-                      )}
+                      {executionError ? executionError : executionOutput}
                     </pre>
                   </div>
                 )}
