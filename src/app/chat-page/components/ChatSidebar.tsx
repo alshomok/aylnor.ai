@@ -135,9 +135,9 @@ export default function ChatSidebar({
     router.push('/sign-up-login-screen');
   };
 
-  const filteredConvs = conversations.filter((c) =>
+  const filteredConvs = Array.isArray(conversations) ? conversations.filter((c) =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ) : [];
 
   // Close dropdown when clicking outside
   useEffect(() => {
