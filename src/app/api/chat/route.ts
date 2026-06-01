@@ -167,14 +167,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build chat history with sliding window (last 5 messages only)
+    // Build chat history with sliding window (last 10 messages for better memory context)
     const chatHistory: ChatMessage[] = messages.map((msg: any) => ({
       role: msg.role === 'bot' ? 'assistant' : 'user',
       content: msg.content,
     }));
 
-    // Apply sliding window: keep only last 5 messages for token optimization
-    const optimizedChatHistory = chatHistory.slice(-5);
+    // Apply sliding window: keep last 10 messages for better memory context
+    const optimizedChatHistory = chatHistory.slice(-10);
 
     // Step 1: Load all knowledge base files as context (only if needed)
     let fileContext = '';

@@ -79,7 +79,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   // Strict useEffect for message loading - only depends on chatId
   useEffect(() => {
     let isMounted = true;
-    
+
     async function fetchChatMessages() {
       console.debug('Fetching messages for chatId:', chatId);
       if (!chatId) {
@@ -89,9 +89,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         return;
       }
 
-      // Reset state to prevent mixing old and new messages
+      // Set loading state but don't reset messages yet to prevent blanking
       if (isMounted) {
-        setMessages([]);
         setIsMessagesLoading(true);
       }
 
@@ -133,7 +132,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
 
     fetchChatMessages();
-    
+
     return () => {
       isMounted = false; // Prevents setting state on unmounted component during rapid switches
     };

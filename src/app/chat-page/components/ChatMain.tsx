@@ -148,7 +148,7 @@ export default function ChatMain({
     console.debug('Messages prop changed:', messages.length);
     // Force a re-render by updating a dummy state
     setRenderKey(prev => prev + 1);
-  }, [messages]);
+  }, [messages.length]); // Only trigger on length change, not full array reference
 
   // Reset internal state when conversation changes
   useEffect(() => {

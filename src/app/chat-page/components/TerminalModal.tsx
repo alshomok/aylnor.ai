@@ -92,13 +92,13 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-4xl bg-zinc-950 rounded-lg border border-zinc-800 shadow-2xl flex flex-col max-h-[80vh]">
+      <div className="w-full max-w-4xl bg-black rounded-lg border border-gray-800 shadow-2xl flex flex-col max-h-[80vh]">
         {/* Header Bar */}
-        <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800">
-          <span className="text-xs text-gray-400 font-mono">Terminal - Output</span>
+        <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
+          <span className="text-xs text-gray-400 font-mono">Console Window - CMD</span>
           <button
             onClick={onClose}
-            className="p-1 rounded text-gray-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
           >
             <X size={16} />
           </button>
@@ -106,32 +106,50 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
 
         {/* Terminal Body */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          {/* Output Area */}
+          {/* Output Area - Classic Black Console */}
           <div
             ref={terminalRef}
-            className="flex-1 overflow-y-auto p-4 font-mono text-sm bg-zinc-950"
-            style={{ direction: 'ltr', textAlign: 'left', unicodeBidi: 'bidi-override' as const }}
+            className="flex-1 overflow-y-auto p-4 font-mono text-sm bg-black h-[300px]"
+            style={{
+              direction: 'ltr' as const,
+              textAlign: 'left' as const,
+              unicodeBidi: 'bidi-override' as const,
+            }}
           >
             {output ? (
               <pre
-                className={`whitespace-pre-wrap break-words ${
-                  status === 'error' ? 'text-red-400' : 'text-green-400'
+                className={`whitespace-pre-wrap ${
+                  status === 'error' ? 'text-red-400' : 'text-[#00ff00]'
                 }`}
+                style={{
+                  direction: 'ltr' as const,
+                  textAlign: 'left' as const,
+                  unicodeBidi: 'bidi-override' as const,
+                }}
               >
                 {output}
               </pre>
             ) : (
-              <div className="text-gray-500">
-                <p className="text-xs mb-2">Aylnor Terminal v1.0.0</p>
-                <p className="text-xs">Ready to execute code...</p>
+              <div
+                className="text-white"
+                style={{
+                  direction: 'ltr' as const,
+                  textAlign: 'left' as const,
+                  unicodeBidi: 'bidi-override' as const,
+                }}
+              >
+                <p className="text-xs mb-2">Microsoft Windows [Version 10.0.19045.4291]</p>
+                <p className="text-xs">(c) Aylnor Corporation. All rights reserved.</p>
+                <p className="text-xs mt-4">Aylnor Console v1.0.0</p>
+                <p className="text-xs mt-2">Ready to execute code...</p>
                 <p className="text-xs mt-2">Enter input below and press Enter to run.</p>
               </div>
             )}
           </div>
 
           {/* Input Row */}
-          <div className="flex items-center px-4 py-2 bg-zinc-900 border-t border-zinc-800">
-            <span className="text-green-400 font-mono text-sm mr-2">$</span>
+          <div className="flex items-center px-4 py-2 bg-gray-900 border-t border-gray-800">
+            <span className="text-[#00ff00] font-mono text-sm mr-2">C:&gt;</span>
             <input
               ref={inputRef}
               type="text"
@@ -141,7 +159,11 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
               placeholder="Enter input (e.g., 5 10 15)..."
               disabled={isExecuting}
               className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 text-white placeholder-gray-600 text-sm font-mono w-full"
-              style={{ direction: 'ltr', textAlign: 'left' }}
+              style={{
+                direction: 'ltr' as const,
+                textAlign: 'left' as const,
+                unicodeBidi: 'bidi-override' as const,
+              }}
             />
           </div>
         </div>
