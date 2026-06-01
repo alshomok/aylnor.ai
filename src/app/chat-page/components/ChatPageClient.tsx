@@ -105,7 +105,12 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
             // Safe handling for empty or undefined messages array
             const messagesArray = Array.isArray(data.messages) ? data.messages : [];
             console.debug('Messages array length:', messagesArray.length);
-            const formattedMessages: Message[] = messagesArray.map((msg: any) => ({
+            
+            // Additional safety check: ensure each message is an object before mapping
+            const validMessages = messagesArray.filter((msg: any) => msg && typeof msg === 'object');
+            console.debug('Valid messages count:', validMessages.length);
+            
+            const formattedMessages: Message[] = validMessages.map((msg: any) => ({
               id: msg.id,
               role: msg.role,
               content: msg.content,

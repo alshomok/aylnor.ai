@@ -1,8 +1,10 @@
 'use client';
 import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import ChatPageClient from './components/ChatPageClient';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/contexts/auth-context';
+
+const ChatPageClient = dynamic(() => import('./components/ChatPageClient'), { ssr: false });
 
 function ChatContent() {
   const { user, loading, checkIpLogin } = useAuth();
