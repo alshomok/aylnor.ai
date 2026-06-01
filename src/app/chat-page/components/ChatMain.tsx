@@ -127,6 +127,12 @@ export default function ChatMain({
     messages.find((m) => m.codeBlock)?.codeBlock ?? null
   );
   const [renderKey, setRenderKey] = useState(0);
+
+  // Debug: Log messages prop changes
+  useEffect(() => {
+    console.debug('ChatMain received messages prop:', messages.length, 'messages');
+    console.debug('ChatMain messages:', messages);
+  }, [messages]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -198,7 +204,13 @@ export default function ChatMain({
       timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    console.debug('Adding user message to state:', userMsg);
+    console.debug('Current messages count before add:', messages.length);
+    setMessages((prev) => {
+      const newMessages = [...prev, userMsg];
+      console.debug('New messages count after add:', newMessages.length);
+      return newMessages;
+    });
     setInputValue('');
     setIsSending(true);
     setIsTyping(true);
@@ -741,12 +753,14 @@ export default function ChatMain({
 
       {/* Code panel - desktop only */}
       {activeCodeBlock && showCodePanel && (
-        <CodeDisplayPanel codeBlock={activeCodeBlock} onClose={() => setShowCodePanel(false)} />
+        <div className="hidden md:flex md:w-[40%] lg:w-[45%] flex-shrink-0 border-l border-border">
+          <CodeDisplayPanel codeBlock={activeCodeBlock} onClose={() => setShowCodePanel(false)} />
+        </div>
       )}
 
       {/* Mobile code panel - shown when code tab is active */}
       {mobileTab === 'code' && activeCodeBlock && (
-        <div className="md:hidden flex-1 overflow-hidden">
+        <div className="fixed inset-0 z-40 md:hidden bg-background">
           <CodeDisplayPanel codeBlock={activeCodeBlock} onClose={() => onMobileTabChange('chat')} />
         </div>
       )}

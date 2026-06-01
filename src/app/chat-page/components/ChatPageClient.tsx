@@ -99,9 +99,11 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         const response = await fetch(`/api/messages?conversationId=${chatId}`);
         if (response.ok) {
           const data = await response.json();
+          console.debug('API response data:', data);
           if (isMounted) {
             // Safe handling for empty or undefined messages array
             const messagesArray = Array.isArray(data.messages) ? data.messages : [];
+            console.debug('Messages array length:', messagesArray.length);
             const formattedMessages: Message[] = messagesArray.map((msg: any) => ({
               id: msg.id,
               role: msg.role,
@@ -113,7 +115,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
               }),
               codeBlock: msg.code_block,
             }));
-            console.debug('Loaded messages:', formattedMessages.length);
+            console.debug('Formatted messages:', formattedMessages);
+            console.debug('Setting messages state with:', formattedMessages.length, 'messages');
             setMessages(formattedMessages); // Update ONLY when data is fetched and component is mounted
           }
         }
@@ -280,7 +283,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   return (
     <div
-      className={`${themeClass} flex h-screen overflow-hidden bg-background text-foreground`}
+      className={`${themeClass} flex h-screen w-full overflow-hidden bg-background text-foreground`}
       dir="rtl"
     >
       {/* Mobile Sidebar Overlay */}
@@ -317,7 +320,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       )}
 
       {/* Desktop Sidebar */}
-      <div className="hidden md:flex md:w-64">
+      <div className={`hidden md:flex transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`}>
         <ChatSidebar
           open={sidebarOpen}
           onToggle={() => setSidebarOpen(!sidebarOpen)}
@@ -340,7 +343,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       </div>
 
       {/* Chat Main Area */}
-      <div className="flex-1 flex flex-col h-full">
+      <div className="flex-1 flex flex-col min-w-0 h-full">
         <ChatMain
           key={chatId}
           messages={messages}

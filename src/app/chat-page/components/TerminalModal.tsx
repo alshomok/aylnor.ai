@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Terminal as TerminalIcon, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface TerminalModalProps {
   isOpen: boolean;
@@ -90,50 +90,17 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
 
   if (!isOpen) return null;
 
-  const getStatusIcon = () => {
-    switch (status) {
-      case 'running':
-        return <Loader2 className="w-4 h-4 animate-spin text-gold" />;
-      case 'success':
-        return <CheckCircle className="w-4 h-4 text-green-400" />;
-      case 'error':
-        return <XCircle className="w-4 h-4 text-red-400" />;
-      default:
-        return <TerminalIcon className="w-4 h-4 text-royal-blue-light" />;
-    }
-  };
-
-  const getStatusText = () => {
-    switch (status) {
-      case 'running':
-        return 'جاري التنفيذ...';
-      case 'success':
-        return 'تم التنفيذ بنجاح';
-      case 'error':
-        return 'حدث خطأ';
-      default:
-        return 'جاهز';
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-4xl bg-[#0a0f1a] rounded-xl border border-royal-blue/30 shadow-2xl shadow-royal-blue/20 flex flex-col max-h-[80vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-royal-blue/30 bg-[#0d1424]">
-          <div className="flex items-center gap-3">
-            <TerminalIcon className="w-5 h-5 text-royal-blue-light" />
-            <h2 className="text-sm font-semibold text-white">Aylnor Code Execution Engine</h2>
-            <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-black/50 border border-royal-blue/20">
-              {getStatusIcon()}
-              <span className="text-xs text-muted-foreground">{getStatusText()}</span>
-            </div>
-          </div>
+      <div className="w-full max-w-4xl bg-zinc-950 rounded-lg border border-zinc-800 shadow-2xl flex flex-col max-h-[80vh]">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800">
+          <span className="text-xs text-gray-400 font-mono">Terminal - Output</span>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1 rounded text-gray-400 hover:text-white hover:bg-zinc-800 transition-colors"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
@@ -142,7 +109,7 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
           {/* Output Area */}
           <div
             ref={terminalRef}
-            className="flex-1 overflow-y-auto p-4 font-mono text-sm bg-black/50"
+            className="flex-1 overflow-y-auto p-4 font-mono text-sm bg-zinc-950"
             style={{ direction: 'ltr', textAlign: 'left', unicodeBidi: 'bidi-override' as const }}
           >
             {output ? (
@@ -154,17 +121,17 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
                 {output}
               </pre>
             ) : (
-              <div className="text-muted-foreground">
+              <div className="text-gray-500">
                 <p className="text-xs mb-2">Aylnor Terminal v1.0.0</p>
                 <p className="text-xs">Ready to execute code...</p>
-                <p className="text-xs mt-2">Enter your input below and press Enter to run.</p>
+                <p className="text-xs mt-2">Enter input below and press Enter to run.</p>
               </div>
             )}
           </div>
 
           {/* Input Row */}
-          <div className="flex items-center gap-2 px-4 py-3 border-t border-royal-blue/30 bg-[#0d1424]">
-            <span className="text-green-400 font-mono text-sm">$</span>
+          <div className="flex items-center px-4 py-2 bg-zinc-900 border-t border-zinc-800">
+            <span className="text-green-400 font-mono text-sm mr-2">$</span>
             <input
               ref={inputRef}
               type="text"
@@ -173,16 +140,9 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
               onKeyDown={handleKeyDown}
               placeholder="Enter input (e.g., 5 10 15)..."
               disabled={isExecuting}
-              className="flex-1 bg-transparent text-white placeholder-muted-foreground text-sm font-mono focus:outline-none"
+              className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 text-white placeholder-gray-600 text-sm font-mono w-full"
               style={{ direction: 'ltr', textAlign: 'left' }}
             />
-            <button
-              onClick={handleRunCode}
-              disabled={isExecuting}
-              className="px-4 py-1.5 rounded-lg bg-royal-blue hover:bg-royal-blue/80 text-white text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isExecuting ? 'Running...' : 'Run'}
-            </button>
           </div>
         </div>
       </div>
