@@ -278,16 +278,16 @@ export default function ChatMain({
         // Always update message content with the current fullContent (excluding metadata)
         // This ensures content is displayed even if metadata arrives early
         setMessages((prev) =>
-          prev.map((msg) =>
+          Array.isArray(prev) ? prev.map((msg) =>
             msg.id === botMsg.id ? { ...msg, content: fullContent } : msg
-          )
+          ) : []
         );
       }
 
       // Final update with metadata
       if (metadata) {
         setMessages((prev) =>
-          prev.map((msg) =>
+          Array.isArray(prev) ? prev.map((msg) =>
             msg.id === botMsg.id
               ? {
                   ...msg,
@@ -295,7 +295,7 @@ export default function ChatMain({
                   fileCard: metadata.fileCard,
                 }
               : msg
-          )
+          ) : []
         );
 
         if (metadata.codeBlock) {
@@ -480,7 +480,8 @@ export default function ChatMain({
 
         {/* Messages - hidden on mobile when code tab is active */}
         <div key={renderKey} className={`flex-1 overflow-y-auto scrollbar-thin px-3 sm:px-4 py-6 space-y-5 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
-          {messages.map((msg) => (
+          {Array.isArray(messages) && messages.length > 0 ? (
+            messages.map((msg) => (
             <div
               key={msg.id}
               className={`message-enter flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'} gap-3`}
@@ -611,7 +612,16 @@ export default function ChatMain({
                 </div>
               </div>
             </div>
-          ))}
+          ))
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              <div className="text-center">
+                <MessageSquare size={48} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm">لا توجد رسائل بعد</p>
+                <p className="text-xs mt-1">ابدأ محادثة جديدة الآن</p>
+              </div>
+            </div>
+          )}
 
           {/* Typing indicator */}
           {isTyping && (
