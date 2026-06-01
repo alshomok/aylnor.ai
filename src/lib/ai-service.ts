@@ -308,7 +308,8 @@ export async function generateAIResponse(
 export async function generateAIResponseStream(
   messages: ChatMessage[],
   mode: BotMode,
-  botPersonality?: string
+  botPersonality?: string,
+  customSystemPrompt?: string
 ) {
   const keyConfig = aiKeyRotationService.getNextAvailableKey(mode);
 
@@ -318,6 +319,7 @@ export async function generateAIResponseStream(
   console.log('Key status:', aiKeyRotationService.getKeyStatus());
   console.log('Messages count:', messages.length);
   console.log('Bot personality:', botPersonality);
+  console.log('Custom system prompt provided:', !!customSystemPrompt);
 
   if (!keyConfig) {
     throw new Error(
@@ -326,10 +328,14 @@ export async function generateAIResponseStream(
   }
 
   try {
-    // Prepare messages with system prompt
-    const systemPrompt = botPersonality
-      ? `${MODE_SYSTEM_PROMPTS[mode]}\n\nAdditional personality: ${botPersonality}`
-      : MODE_SYSTEM_PROMPTS[mode];
+    // Prepare messages with system prompt - use custom prompt if provided, otherwise fallback to MODE_SYSTEM_PROMPTS
+    const systemPrompt = customSystemPrompt
+      ? (botPersonality
+          ? `${customSystemPrompt}\n\nAdditional personality: ${botPersonality}`
+          : customSystemPrompt)
+      : (botPersonality
+          ? `${MODE_SYSTEM_PROMPTS[mode]}\n\nAdditional personality: ${botPersonality}`
+          : MODE_SYSTEM_PROMPTS[mode]);
 
     const apiMessages = [{ role: 'system' as const, content: systemPrompt }, ...messages];
 
@@ -391,7 +397,7 @@ export async function generateAIResponseStream(
 
     // Retry with next available key
     console.log(`Key ${keyConfig.id} failed, retrying with next available key...`);
-    return generateAIResponseStream(messages, mode, botPersonality);
+    return generateAIResponseStream(messages, mode, botPersonality, customSystemPrompt);
   }
 }
 

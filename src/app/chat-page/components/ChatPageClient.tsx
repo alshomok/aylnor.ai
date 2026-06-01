@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import ChatSidebar from './ChatSidebar';
 import ChatMain from './ChatMain';
 import { useAuth } from '@/contexts/auth-context';
+import { useChatStore, Message as StoreMessage, Conversation as StoreConversation } from '@/store/useChatStore';
 
 export type BotMode = 'quick' | 'thoughtful' | 'programming';
 export type Theme = 'dark' | 'light';
@@ -40,17 +41,18 @@ interface ChatPageClientProps {
 export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   const { user, onAuthStateChange } = useAuth();
   const router = useRouter();
+  
+  // Use Zustand store for chat state
+  const { messages, setMessages, conversations, setConversations, activeConvId, setActiveConvId, isLoading, setIsLoading, addMessage, clearMessages } = useChatStore();
+  
+  // Local state for UI-only properties
   const [theme, setTheme] = useState<Theme>('dark');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeMode, setActiveMode] = useState<BotMode>('thoughtful');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConvId, setActiveConvId] = useState<string>(chatId);
   const [showCodePanel, setShowCodePanel] = useState(true);
   const [botName, setBotName] = useState('aylnor');
   const [botPersonality, setBotPersonality] = useState('مساعد مفيد ودقيق وأكاديمي');
   const [username, setUsername] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'chat' | 'code'>('chat');
@@ -73,8 +75,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   // Sync activeConvId with chatId prop (from URL)
   useEffect(() => {
-    setActiveConvId(chatId);
-  }, [chatId]);
+    setActiveConvId(chatId || null);
+  }, [chatId, setActiveConvId]);
 
   // Strict useEffect for message loading - only depends on chatId
   useEffect(() => {
@@ -84,7 +86,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       console.debug('Fetching messages for chatId:', chatId);
       if (!chatId) {
         if (isMounted) {
-          setMessages([]); // Only clear when no chat is active
+          clearMessages(); // Only clear when no chat is active
         }
         return;
       }
@@ -122,7 +124,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       } catch (error) {
         console.error('Error loading messages:', error);
         if (isMounted) {
-          setMessages([]); // Set empty array on error to prevent crash
+          clearMessages(); // Set empty array on error to prevent crash
         }
       } finally {
         if (isMounted) {
@@ -159,10 +161,10 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           }
         } else if (event === 'SIGNED_OUT') {
           console.log('User signed out, clearing all local state');
-          // Clear all local state
+          // Clear all store state
+          clearMessages();
           setConversations([]);
-          setMessages([]);
-          setActiveConvId('');
+          setActiveConvId(null);
           setIsLoading(false);
         }
       };
@@ -215,8 +217,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           timestamp: 'الآن',
           mode: activeMode,
         };
-        setConversations(prev => [newConv, ...prev]);
+        setConversations([newConv, ...conversations]);
         setActiveConvId(newId);
+        clearMessages(); // Clear messages when creating new conversation
         router.push(`/chat-page?id=${newId}`);
         return newId;
       }
@@ -231,8 +234,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         mode: data.conversation.mode,
       };
       // Preserve existing conversations by adding new one to the beginning
-      setConversations(prev => [newConv, ...prev]);
+      setConversations([newConv, ...conversations]);
       setActiveConvId(conversationId);
+      clearMessages(); // Clear messages when creating new conversation
       // Save to localStorage for persistence
       if (user?.id) {
         localStorage.setItem(`lastConvId_${user.id}`, conversationId);
@@ -251,8 +255,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
         timestamp: 'الآن',
         mode: activeMode,
       };
-      setConversations(prev => [newConv, ...prev]);
+      setConversations([newConv, ...conversations]);
       setActiveConvId(newId);
+      clearMessages(); // Clear messages when creating new conversation
       router.push(`/chat-page?id=${newId}`);
       console.debug('Using fallback conversation ID:', newId);
       return newId;
@@ -345,8 +350,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       <div className="flex-1 flex flex-col min-w-0 h-full">
         <ChatMain
           key={chatId}
-          messages={messages}
-          setMessages={setMessages}
           activeMode={activeMode}
           setActiveMode={setActiveMode}
           showCodePanel={showCodePanel}

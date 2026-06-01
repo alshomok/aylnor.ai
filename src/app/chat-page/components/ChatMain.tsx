@@ -23,10 +23,9 @@ import FileCard from './FileCard';
 import CodeExecution from './CodeExecution';
 import { FileDownloadCard } from './FileDownloadCard';
 import { useAuth } from '@/contexts/auth-context';
+import { useChatStore } from '@/store/useChatStore';
 
 interface ChatMainProps {
-  messages: Message[];
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   activeMode: BotMode;
   setActiveMode: (mode: BotMode) => void;
   showCodePanel: boolean;
@@ -100,8 +99,6 @@ print(output)`,
 };
 
 export default function ChatMain({
-  messages,
-  setMessages,
   activeMode,
   setActiveMode,
   showCodePanel,
@@ -119,6 +116,9 @@ export default function ChatMain({
   onMobileTabChange,
 }: ChatMainProps) {
   const { user } = useAuth();
+  // Use Zustand store for chat state
+  const { messages, setMessages, addMessage } = useChatStore();
+  
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -206,11 +206,7 @@ export default function ChatMain({
 
     console.debug('Adding user message to state:', userMsg);
     console.debug('Current messages count before add:', messages.length);
-    setMessages((prev) => {
-      const newMessages = [...prev, userMsg];
-      console.debug('New messages count after add:', newMessages.length);
-      return newMessages;
-    });
+    addMessage(userMsg);
     setInputValue('');
     setIsSending(true);
     setIsTyping(true);

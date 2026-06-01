@@ -109,7 +109,7 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
           {/* Output Area - Classic Black Console */}
           <div
             ref={terminalRef}
-            className="flex-1 overflow-y-auto p-4 font-mono text-sm bg-black h-[300px]"
+            className="flex-1 overflow-y-auto p-4 font-mono text-sm bg-[#0c0c0c] h-[300px]"
             style={{
               direction: 'ltr' as const,
               textAlign: 'left' as const,
@@ -117,8 +117,8 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
             }}
           >
             {output ? (
-              <pre
-                className={`whitespace-pre-wrap ${
+              <div
+                className={`${
                   status === 'error' ? 'text-red-400' : 'text-[#00ff00]'
                 }`}
                 style={{
@@ -127,8 +127,12 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
                   unicodeBidi: 'bidi-override' as const,
                 }}
               >
-                {output}
-              </pre>
+                {output.split('\n').map((line, index) => (
+                  <div key={index} className="whitespace-pre-wrap">
+                    {line}
+                  </div>
+                ))}
+              </div>
             ) : (
               <div
                 className="text-white"

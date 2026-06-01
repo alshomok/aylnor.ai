@@ -2,12 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseServer } from '@/lib/supabase';
 import { generateAIResponseStream, BotMode, ChatMessage } from '@/lib/ai-service';
 import { findBestMatch } from '@/lib/matching-algorithm';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 const HOURLY_REQUEST_LIMITS: Record<BotMode, number> = {
   quick: Infinity,
   thoughtful: 50,
   programming: 50,
 };
+
+// Map mode names to skill file names
+const MODE_TO_SKILL_FILE: Record<BotMode, string> = {
+  quick: 'fast.md',
+  thoughtful: 'thinker.md',
+  programming: 'programmer.md',
+};
+
+async function loadSkillFile(mode: BotMode): Promise<string> {
+  const skillFileName = MODE_TO_SKILL_FILE[mode];
+  const skillFilePath = path.join(process.cwd(), 'skills', skillFileName);
+
+  try {
+    const skillContent = await fs.readFile(skillFilePath, 'utf-8');
+    return skillContent;
+  } catch (error) {
+    console.error(`Failed to load skill file for mode ${mode}:`, error);
+    // Fallback to a basic prompt if file loading fails
+    return `You are "aylnor" (Aylnor.ai), an elite academic AI assistant specialized for computer science students. You were proudly created by the Student Engineer Ahmed Quraiz.`;
+  }
+}
 
 async function checkHourlyRequestLimit(userId: string, mode: BotMode): Promise<{ allowed: boolean; remainingMinutes?: number }> {
   const server = supabaseServer();
@@ -167,14 +190,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build chat history with sliding window (last 10 messages for better memory context)
+    // Build chat history with sliding window (last 5 messages to prevent context loops)
     const chatHistory: ChatMessage[] = messages.map((msg: any) => ({
       role: msg.role === 'bot' ? 'assistant' : 'user',
       content: msg.content,
     }));
 
-    // Apply sliding window: keep last 10 messages for better memory context
-    const optimizedChatHistory = chatHistory.slice(-10);
+    // Apply sliding window: keep last 5 messages to prevent context loops and hallucination bugs
+    const optimizedChatHistory = chatHistory.slice(-5);
 
     // Step 1: Load all knowledge base files as context (only if needed)
     let fileContext = '';
@@ -376,16 +399,20 @@ ${searchResults}
       content: finalMessage,
     });
 
-    // Generate AI response with streaming using optimized chat history
+    // Load skill file dynamically based on mode
+    const skillPrompt = await loadSkillFile(mode as BotMode);
+
+    // Generate AI response with streaming using optimized chat history and dynamic skill prompt
     console.log('=== Generating AI Response ===');
     console.log('Optimized chat history length:', optimizedChatHistory.length);
     console.log('Final message length:', finalMessage.length);
     console.log('Mode:', mode);
     console.log('Bot personality:', botPersonality);
+    console.log('Skill prompt loaded from file:', skillPrompt.substring(0, 100) + '...');
 
     let stream;
     try {
-      stream = await generateAIResponseStream(optimizedChatHistory, mode as BotMode, botPersonality);
+      stream = await generateAIResponseStream(optimizedChatHistory, mode as BotMode, botPersonality, skillPrompt);
       console.log('Stream generated successfully');
       console.log('Stream object:', stream);
       console.log('Stream has textStream:', 'textStream' in stream);
