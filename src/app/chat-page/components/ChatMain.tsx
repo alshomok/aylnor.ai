@@ -23,9 +23,10 @@ import FileCard from './FileCard';
 import CodeExecution from './CodeExecution';
 import { FileDownloadCard } from './FileDownloadCard';
 import { useAuth } from '@/contexts/auth-context';
-import { useChat } from '@ai-sdk/react';
 
 interface ChatMainProps {
+  messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   activeMode: BotMode;
   setActiveMode: (mode: BotMode) => void;
   showCodePanel: boolean;
@@ -99,6 +100,8 @@ print(output)`,
 };
 
 export default function ChatMain({
+  messages,
+  setMessages,
   activeMode,
   setActiveMode,
   showCodePanel,
@@ -117,15 +120,7 @@ export default function ChatMain({
 }: ChatMainProps) {
   const { user } = useAuth();
   
-  // Use Vercel AI SDK's useChat hook
-  const { messages, input, handleInputChange, handleSubmit, setMessages, isLoading } = useChat({
-    api: '/api/chat',
-    body: {
-      currentMode: activeMode,
-      activeConvId,
-    },
-  });
-  
+  const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [activeCodeBlock, setActiveCodeBlock] = useState<{ language: string; code: string } | null>(
@@ -141,37 +136,6 @@ export default function ChatMain({
   }, [messages]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Sync history: When activeConvId changes, fetch from Supabase and seed the hook's state
-  useEffect(() => {
-    async function fetchHistory() {
-      if (!activeConvId) {
-        setMessages([]);
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/messages?conversationId=${activeConvId}`);
-        if (response.ok) {
-          const data = await response.json();
-          const messagesArray = Array.isArray(data.messages) ? data.messages : [];
-          const validMessages = messagesArray.filter((msg: any) => msg && typeof msg === 'object');
-          
-          const formattedMessages = validMessages.map((msg: any) => ({
-            id: msg.id,
-            role: msg.role === 'bot' ? 'assistant' : 'user',
-            content: msg.content,
-          }));
-          
-          setMessages(formattedMessages);
-        }
-      } catch (error) {
-        console.error('Error fetching history:', error);
-      }
-    }
-
-    fetchHistory();
-  }, [activeConvId, setMessages]);
 
   const activeConv = Array.isArray(conversations) ? conversations.find((c) => c.id === activeConvId) : undefined;
   const [showModeDropdown, setShowModeDropdown] = useState(false);
@@ -245,16 +209,86 @@ export default function ChatMain({
     }
 
     setIsTyping(true);
-    handleSubmit(e);
-  };
+    setIsSending(true);
+    setInput('');
 
-  // Handle streaming completion
-  useEffect(() => {
-    if (!isLoading) {
-      setIsTyping(false);
+    // Add user message to state
+    const userMsg: Message = {
+      id: `msg-${Date.now()}-user`,
+      role: 'user',
+      content,
+      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: content,
+          conversationId: sendingConversationId,
+          mode: activeMode,
+          botPersonality: 'مساعد مفيد ودقيق وأكاديمي',
+          userId: user.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get response');
+      }
+
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      // Create bot message with empty content initially
+      const botMsg: Message = {
+        id: `msg-${Date.now()}-bot`,
+        role: 'bot',
+        content: '',
+        mode: activeMode,
+        timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setMessages((prev) => [...prev, botMsg]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        fullContent += chunk;
+
+        // Update message content
+        setMessages((prev) =>
+          Array.isArray(prev) ? prev.map((msg) =>
+            msg.id === botMsg.id ? { ...msg, content: fullContent } : msg
+          ) : []
+        );
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      const errorMsg: Message = {
+        id: `msg-${Date.now()}-bot`,
+        role: 'bot',
+        content: 'عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.',
+        mode: activeMode,
+        timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
       setIsSending(false);
+      setIsTyping(false);
     }
-  }, [isLoading]);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -270,7 +304,7 @@ export default function ChatMain({
   };
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    handleInputChange(e);
+    setInput(e.target.value);
     const ta = e.target;
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';

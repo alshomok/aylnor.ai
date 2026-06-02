@@ -357,6 +357,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       <div className="flex-1 flex flex-col min-w-0 h-full">
         <ChatMain
           key={chatId}
+          messages={messages}
+          setMessages={setMessages}
           activeMode={activeMode}
           setActiveMode={setActiveMode}
           showCodePanel={showCodePanel}
