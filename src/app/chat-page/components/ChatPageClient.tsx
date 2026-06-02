@@ -297,7 +297,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background text-foreground">
+      <div className="flex h-[100dvh] items-center justify-center bg-background text-foreground">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
           <p className="text-muted-foreground">جارٍ التحميل...</p>
@@ -308,7 +308,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   return (
     <div
-      className={`${themeClass} flex h-screen w-full overflow-hidden bg-background text-foreground`}
+      className={`${themeClass} flex h-[100dvh] w-full overflow-hidden bg-background text-foreground`}
       dir="rtl"
     >
       {/* Mobile Sidebar Overlay */}

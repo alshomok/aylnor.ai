@@ -92,7 +92,15 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-4xl bg-black rounded-lg border border-gray-800 shadow-2xl flex flex-col max-h-[80vh]">
+      <div className="w-full max-w-4xl bg-black rounded-lg border border-gray-800 shadow-2xl flex flex-col max-h-[80vh] relative">
+        {/* Mobile Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-50 bg-neutral-800 text-white p-2 rounded-md md:hidden"
+        >
+          <X size={20} />
+        </button>
+
         {/* Header Bar */}
         <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
           <span className="text-xs text-gray-400 font-mono">Console Window - CMD</span>
