@@ -199,7 +199,7 @@ export default function ChatMain({
   useEffect(() => {
     console.debug('Button state:', {
       isSending,
-      hasContent: input.trim().length > 0,
+      hasContent: input?.trim().length > 0,
       hasUser: !!user?.id,
       hasConversation: !!activeConvId,
       userId: user?.id,
@@ -209,7 +209,7 @@ export default function ChatMain({
 
   const sendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    const content = input.trim();
+    const content = input?.trim() || '';
     if (!content || isSending) return;
 
     if (!user?.id) {
@@ -589,7 +589,7 @@ export default function ChatMain({
             {/* Send button */}
             <button
               onClick={() => sendMessage()}
-              disabled={isSending || !input.trim()}
+              disabled={isSending || !input?.trim()}
               className="btn-primary p-2 sm:p-2.5 rounded-xl shrink-0 mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
               title="إرسال الرسالة (Enter)"
             >
