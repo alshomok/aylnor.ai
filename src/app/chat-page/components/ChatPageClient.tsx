@@ -77,12 +77,15 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   // Sync activeConvId with chatId prop (from URL)
   useEffect(() => {
-    setActiveConvId(chatId || '');
+    if (chatId && chatId !== activeConvId) {
+      setActiveConvId(chatId);
+    }
   }, [chatId]);
 
   // Strict useEffect for message loading - depends on activeConvId
   useEffect(() => {
     const abortController = new AbortController();
+    const signal = abortController.signal;
 
     async function fetchChatMessages() {
       console.debug('Fetching messages for activeConvId:', activeConvId);
@@ -99,12 +102,19 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       setIsMessagesLoading(true);
 
       try {
-        const response = await fetch(`/api/messages?conversationId=${activeConvId}`, {
-          signal: abortController.signal
-        });
+        const response = await fetch(
+          `/api/messages?conversationId=${activeConvId}`,
+          { signal }
+        );
+
+        if (signal.aborted) return;
+
         if (response.ok) {
           const data = await response.json();
           console.debug('API response data:', data);
+          
+          if (signal.aborted) return;
+
           // Safe handling for empty or undefined messages array
           const messagesArray = Array.isArray(data.messages) ? data.messages : [];
           console.debug('Messages array length:', messagesArray.length);
@@ -133,12 +143,11 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           setMessages([]);
         }
       } catch (error: any) {
-        if (error.name !== 'AbortError') {
-          console.error('Error loading messages:', error);
-          setMessages([]);
-        }
+        if (error.name === 'AbortError') return;
+        console.error('Error loading messages:', error);
+        setMessages([]);
       } finally {
-        if (!abortController.signal.aborted) {
+        if (!signal.aborted) {
           setIsMessagesLoading(false);
         }
       }
@@ -274,6 +283,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   };
 
   const handleSelectConversation = (conversationId: string) => {
+    // Prevent duplicate updates
+    if (conversationId === activeConvId) return;
+    
     // Set activeConvId directly to trigger message loading immediately
     setActiveConvId(conversationId);
     router.push(`/chat-page?id=${conversationId}`);

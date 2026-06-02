@@ -285,12 +285,26 @@ export default function ChatMain({
         ? fullContent.substring(0, finalMetaIdx)
         : fullContent;
 
+      // Extract codeBlock from metadata
+      let extractedCodeBlock: { language: string; code: string } | null = null;
+      if (finalMetaIdx !== -1) {
+        try {
+          const metadataStr = fullContent.substring(finalMetaIdx + METADATA_MARKER.length);
+          const metadata = JSON.parse(metadataStr);
+          if (metadata.codeBlock) {
+            extractedCodeBlock = metadata.codeBlock;
+          }
+        } catch (error) {
+          console.error('Error parsing metadata:', error);
+        }
+      }
+
       setMessages((prev) => {
         if (!Array.isArray(prev)) return [];
         const belongsToCurrentConv = prev.some(m => m.id === botMsg.id);
         if (!belongsToCurrentConv) return prev;
         return prev.map((msg) =>
-          msg.id === botMsg.id ? { ...msg, content: cleanFinalContent } : msg
+          msg.id === botMsg.id ? { ...msg, content: cleanFinalContent, codeBlock: extractedCodeBlock } : msg
         );
       });
     } catch (error) {
