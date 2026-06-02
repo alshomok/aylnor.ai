@@ -23,7 +23,7 @@ import FileCard from './FileCard';
 import CodeExecution from './CodeExecution';
 import { FileDownloadCard } from './FileDownloadCard';
 import { useAuth } from '@/contexts/auth-context';
-import { useChatStore } from '@/store/useChatStore';
+import { useChat } from '@ai-sdk/react';
 
 interface ChatMainProps {
   activeMode: BotMode;
@@ -116,17 +116,23 @@ export default function ChatMain({
   onMobileTabChange,
 }: ChatMainProps) {
   const { user } = useAuth();
-  // Use Zustand store for chat state
-  const { messages, setMessages, addMessage } = useChatStore();
   
-  const [inputValue, setInputValue] = useState('');
+  // Use Vercel AI SDK's useChat hook
+  const { messages, input, handleInputChange, handleSubmit, setMessages, isLoading } = useChat({
+    api: '/api/chat',
+    body: {
+      currentMode: activeMode,
+      activeConvId,
+    },
+  });
+  
   const [isTyping, setIsTyping] = useState(false);
-  const [isSending, setIsSending] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [activeCodeBlock, setActiveCodeBlock] = useState<{ language: string; code: string } | null>(
-    messages.find((m) => m.codeBlock)?.codeBlock ?? null
+    Array.isArray(messages) ? messages.find((m) => m.codeBlock)?.codeBlock ?? null : null
   );
   const [renderKey, setRenderKey] = useState(0);
+  const [isSending, setIsSending] = useState(false);
 
   // Debug: Log messages prop changes
   useEffect(() => {
@@ -136,7 +142,38 @@ export default function ChatMain({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const activeConv = conversations.find((c) => c.id === activeConvId);
+  // Sync history: When activeConvId changes, fetch from Supabase and seed the hook's state
+  useEffect(() => {
+    async function fetchHistory() {
+      if (!activeConvId) {
+        setMessages([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/messages?conversationId=${activeConvId}`);
+        if (response.ok) {
+          const data = await response.json();
+          const messagesArray = Array.isArray(data.messages) ? data.messages : [];
+          const validMessages = messagesArray.filter((msg: any) => msg && typeof msg === 'object');
+          
+          const formattedMessages = validMessages.map((msg: any) => ({
+            id: msg.id,
+            role: msg.role === 'bot' ? 'assistant' : 'user',
+            content: msg.content,
+          }));
+          
+          setMessages(formattedMessages);
+        }
+      } catch (error) {
+        console.error('Error fetching history:', error);
+      }
+    }
+
+    fetchHistory();
+  }, [activeConvId, setMessages]);
+
+  const activeConv = Array.isArray(conversations) ? conversations.find((c) => c.id === activeConvId) : undefined;
   const [showModeDropdown, setShowModeDropdown] = useState(false);
 
   useEffect(() => {
@@ -162,17 +199,17 @@ export default function ChatMain({
   useEffect(() => {
     console.debug('Button state:', {
       isSending,
-      hasContent: inputValue.trim().length > 0,
+      hasContent: input.trim().length > 0,
       hasUser: !!user?.id,
       hasConversation: !!activeConvId,
       userId: user?.id,
       conversationId: activeConvId,
     });
-  }, [isSending, inputValue, user, activeConvId]);
+  }, [isSending, input, user, activeConvId]);
 
   const sendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    const content = inputValue.trim();
+    const content = input.trim();
     if (!content || isSending) return;
 
     if (!user?.id) {
@@ -197,20 +234,6 @@ export default function ChatMain({
     // to prevent race conditions if the user switches conversations
     const sendingConversationId = conversationId;
 
-    const userMsg: Message = {
-      id: `msg-${Date.now()}-user`,
-      role: 'user',
-      content,
-      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    console.debug('Adding user message to state:', userMsg);
-    console.debug('Current messages count before add:', messages.length);
-    addMessage(userMsg);
-    setInputValue('');
-    setIsSending(true);
-    setIsTyping(true);
-
     if (activeConv?.title === 'محادثة جديدة') {
       setConversations((prev) =>
         prev.map((c) =>
@@ -221,113 +244,17 @@ export default function ChatMain({
       );
     }
 
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: content,
-          conversationId: sendingConversationId,
-          mode: activeMode,
-          botPersonality: 'مساعد مفيد ودقيق وأكاديمي',
-          userId: user.id,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Send failed', errorText);
-        throw new Error('Failed to get response');
-      }
-
-      // Handle streaming response
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullContent = '';
-      let metadata = null;
-      let metadataReceived = false;
-
-      if (!reader) {
-        throw new Error('No response body');
-      }
-
-      // Create bot message with empty content initially
-      const botMsg: Message = {
-        id: `msg-${Date.now()}-bot`,
-        role: 'bot',
-        content: '',
-        mode: activeMode,
-        timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setMessages((prev) => [...prev, botMsg]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        fullContent += chunk;
-
-        // Check for metadata separator
-        if (fullContent.includes('__METADATA__')) {
-          const [contentPart, metadataPart] = fullContent.split('__METADATA__');
-          fullContent = contentPart;
-          try {
-            metadata = JSON.parse(metadataPart.trim());
-            metadataReceived = true;
-          } catch (e) {
-            console.error('Failed to parse metadata:', e);
-          }
-        }
-
-        // Always update message content with the current fullContent (excluding metadata)
-        // This ensures content is displayed even if metadata arrives early
-        setMessages((prev) =>
-          Array.isArray(prev) ? prev.map((msg) =>
-            msg.id === botMsg.id ? { ...msg, content: fullContent } : msg
-          ) : []
-        );
-      }
-
-      // Final update with metadata
-      if (metadata) {
-        setMessages((prev) =>
-          Array.isArray(prev) ? prev.map((msg) =>
-            msg.id === botMsg.id
-              ? {
-                  ...msg,
-                  codeBlock: metadata.codeBlock,
-                  fileCard: metadata.fileCard,
-                }
-              : msg
-          ) : []
-        );
-
-        if (metadata.codeBlock) {
-          setActiveCodeBlock(metadata.codeBlock);
-          setShowCodePanel(true);
-        }
-      }
-
-      console.debug('Message sent successfully');
-    } catch (error) {
-      console.error('Error sending message:', error);
-      const botMsg: Message = {
-        id: `msg-${Date.now()}-bot`,
-        role: 'bot',
-        content: 'عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.',
-        mode: activeMode,
-        timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages((prev) => [...prev, botMsg]);
-    } finally {
-      setIsSending(false);
-      setIsTyping(false);
-    }
+    setIsTyping(true);
+    handleSubmit(e);
   };
+
+  // Handle streaming completion
+  useEffect(() => {
+    if (!isLoading) {
+      setIsTyping(false);
+      setIsSending(false);
+    }
+  }, [isLoading]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -343,7 +270,7 @@ export default function ChatMain({
   };
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputValue(e.target.value);
+    handleInputChange(e);
     const ta = e.target;
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
@@ -662,7 +589,7 @@ export default function ChatMain({
             {/* Send button */}
             <button
               onClick={() => sendMessage()}
-              disabled={isSending || !inputValue.trim()}
+              disabled={isSending || !input.trim()}
               className="btn-primary p-2 sm:p-2.5 rounded-xl shrink-0 mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
               title="إرسال الرسالة (Enter)"
             >
@@ -731,7 +658,7 @@ export default function ChatMain({
 
             <textarea
               ref={textareaRef}
-              value={inputValue}
+              value={input}
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
               placeholder={`اسأل ${botName} أي شيء… (Shift+Enter لسطر جديد)`}
