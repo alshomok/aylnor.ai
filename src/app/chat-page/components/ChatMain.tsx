@@ -253,6 +253,8 @@ export default function ChatMain({
 
       setMessages((prev) => [...prev, botMsg]);
 
+      const METADATA_MARKER = '\n\n__METADATA__';
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -260,13 +262,37 @@ export default function ChatMain({
         const chunk = decoder.decode(value, { stream: true });
         fullContent += chunk;
 
-        // Update message content
-        setMessages((prev) =>
-          Array.isArray(prev) ? prev.map((msg) =>
-            msg.id === botMsg.id ? { ...msg, content: fullContent } : msg
-          ) : []
-        );
+        // Remove __METADATA__ from display content
+        const metaIdx = fullContent.indexOf(METADATA_MARKER);
+        const displayContent = metaIdx !== -1
+          ? fullContent.substring(0, metaIdx)
+          : fullContent;
+
+        // Update message content with race condition check
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) return [];
+          const belongsToCurrentConv = prev.some(m => m.id === botMsg.id);
+          if (!belongsToCurrentConv) return prev;
+          return prev.map((msg) =>
+            msg.id === botMsg.id ? { ...msg, content: displayContent } : msg
+          );
+        });
       }
+
+      // Final cleanup after stream ends
+      const finalMetaIdx = fullContent.indexOf(METADATA_MARKER);
+      const cleanFinalContent = finalMetaIdx !== -1
+        ? fullContent.substring(0, finalMetaIdx)
+        : fullContent;
+
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) return [];
+        const belongsToCurrentConv = prev.some(m => m.id === botMsg.id);
+        if (!belongsToCurrentConv) return prev;
+        return prev.map((msg) =>
+          msg.id === botMsg.id ? { ...msg, content: cleanFinalContent } : msg
+        );
+      });
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMsg: Message = {

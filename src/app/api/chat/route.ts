@@ -483,12 +483,19 @@ ${searchResults}
             };
           }
 
+          // Remove __METADATA__ from content before saving to database
+          const METADATA_MARKER = '\n\n__METADATA__';
+          const metaIdx = fullContent.indexOf(METADATA_MARKER);
+          const cleanContent = metaIdx !== -1
+            ? fullContent.substring(0, metaIdx)
+            : fullContent;
+
           // Format the response based on source
-          let formattedContent = fullContent;
+          let formattedContent = cleanContent;
           if (source === 'file' && foundFile) {
-            formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${fullContent}`;
+            formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${cleanContent}`;
           } else if (source === 'web') {
-            formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${fullContent}`;
+            formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${cleanContent}`;
           }
 
           // Save bot response to Supabase (skip if local conversation)

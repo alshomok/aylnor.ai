@@ -82,16 +82,13 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   // Strict useEffect for message loading - depends on activeConvId
   useEffect(() => {
-    let isMounted = true;
+    const abortController = new AbortController();
 
     async function fetchChatMessages() {
       console.debug('Fetching messages for activeConvId:', activeConvId);
       
       // Clear messages immediately when conversation changes
-      if (isMounted) {
-        console.debug('Clearing messages immediately before fetch');
-        setMessages([]);
-      }
+      setMessages([]);
       
       if (!activeConvId) {
         console.debug('No activeConvId, keeping messages cleared');
@@ -99,53 +96,49 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       }
 
       // Set loading state
-      if (isMounted) {
-        setIsMessagesLoading(true);
-      }
+      setIsMessagesLoading(true);
 
       try {
-        const response = await fetch(`/api/messages?conversationId=${activeConvId}`);
+        const response = await fetch(`/api/messages?conversationId=${activeConvId}`, {
+          signal: abortController.signal
+        });
         if (response.ok) {
           const data = await response.json();
           console.debug('API response data:', data);
-          if (isMounted) {
-            // Safe handling for empty or undefined messages array
-            const messagesArray = Array.isArray(data.messages) ? data.messages : [];
-            console.debug('Messages array length:', messagesArray.length);
-            
-            // Additional safety check: ensure each message is an object before mapping
-            const validMessages = messagesArray.filter((msg: any) => msg && typeof msg === 'object');
-            console.debug('Valid messages count:', validMessages.length);
-            
-            const formattedMessages: Message[] = validMessages.map((msg: any) => ({
-              id: msg.id,
-              role: msg.role,
-              content: msg.content,
-              mode: msg.mode,
-              timestamp: new Date(msg.created_at).toLocaleTimeString('ar-SA', {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-              codeBlock: msg.code_block,
-            }));
-            console.debug('Formatted messages:', formattedMessages);
-            console.debug('Setting messages state with:', formattedMessages.length, 'messages');
-            setMessages(formattedMessages); // Update ONLY when data is fetched and component is mounted
-            console.debug('Messages state set successfully');
-          }
+          // Safe handling for empty or undefined messages array
+          const messagesArray = Array.isArray(data.messages) ? data.messages : [];
+          console.debug('Messages array length:', messagesArray.length);
+          
+          // Additional safety check: ensure each message is an object before mapping
+          const validMessages = messagesArray.filter((msg: any) => msg && typeof msg === 'object');
+          console.debug('Valid messages count:', validMessages.length);
+          
+          const formattedMessages: Message[] = validMessages.map((msg: any) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            mode: msg.mode,
+            timestamp: new Date(msg.created_at).toLocaleTimeString('ar-SA', {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+            codeBlock: msg.code_block,
+          }));
+          console.debug('Formatted messages:', formattedMessages);
+          console.debug('Setting messages state with:', formattedMessages.length, 'messages');
+          setMessages(formattedMessages);
+          console.debug('Messages state set successfully');
         } else {
           console.error('API response not OK:', response.status);
-          if (isMounted) {
-            setMessages([]);
-          }
+          setMessages([]);
         }
-      } catch (error) {
-        console.error('Error loading messages:', error);
-        if (isMounted) {
-          setMessages([]); // Set empty array on error to prevent crash
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Error loading messages:', error);
+          setMessages([]);
         }
       } finally {
-        if (isMounted) {
+        if (!abortController.signal.aborted) {
           setIsMessagesLoading(false);
         }
       }
@@ -153,10 +146,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
     fetchChatMessages();
 
-    return () => {
-      isMounted = false; // Prevents setting state on unmounted component during rapid switches
-    };
-  }, [activeConvId]); // Depend on activeConvId instead of chatId
+    return () => abortController.abort();
+  }, [activeConvId]);
 
   // Register auth state change callback for historical data hydration
   useEffect(() => {
