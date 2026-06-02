@@ -88,6 +88,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       console.debug('Fetching messages for activeConvId:', activeConvId);
       if (!activeConvId) {
         if (isMounted) {
+          console.debug('No activeConvId, clearing messages');
           setMessages([]); // Only clear when no chat is active
         }
         return;
@@ -126,6 +127,12 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
             console.debug('Formatted messages:', formattedMessages);
             console.debug('Setting messages state with:', formattedMessages.length, 'messages');
             setMessages(formattedMessages); // Update ONLY when data is fetched and component is mounted
+            console.debug('Messages state set successfully');
+          }
+        } else {
+          console.error('API response not OK:', response.status);
+          if (isMounted) {
+            setMessages([]);
           }
         }
       } catch (error) {
@@ -356,7 +363,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       {/* Chat Main Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full">
         <ChatMain
-          key={chatId}
           messages={messages}
           setMessages={setMessages}
           activeMode={activeMode}

@@ -126,7 +126,6 @@ export default function ChatMain({
   const [activeCodeBlock, setActiveCodeBlock] = useState<{ language: string; code: string } | null>(
     Array.isArray(messages) ? messages.find((m) => m.codeBlock)?.codeBlock ?? null : null
   );
-  const [renderKey, setRenderKey] = useState(0);
   const [isSending, setIsSending] = useState(false);
 
   // Debug: Log messages prop changes
@@ -143,13 +142,6 @@ export default function ChatMain({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
-
-  // Force re-render when messages prop changes
-  useEffect(() => {
-    console.debug('Messages prop changed:', messages.length);
-    // Force a re-render by updating a dummy state
-    setRenderKey(prev => prev + 1);
-  }, [messages.length]); // Only trigger on length change, not full array reference
 
   // Reset internal state when conversation changes
   useEffect(() => {
@@ -448,7 +440,7 @@ export default function ChatMain({
         </div>
 
         {/* Messages - hidden on mobile when code tab is active */}
-        <div key={renderKey} className={`flex-1 overflow-y-auto scrollbar-thin px-3 sm:px-4 py-6 space-y-5 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
+        <div className={`flex-1 overflow-y-auto scrollbar-thin px-3 sm:px-4 py-6 space-y-5 ${mobileTab === 'code' ? 'hidden md:block' : ''}`}>
           {Array.isArray(messages) && messages.length > 0 ? (
             messages.map((msg) => (
             <div
