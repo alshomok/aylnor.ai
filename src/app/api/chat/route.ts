@@ -5,6 +5,42 @@ import { findBestMatch } from '@/lib/matching-algorithm';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+// Strict TypeScript Discriminated Unions for Execution States
+type ExecutionState =
+  | { status: 'idle' }
+  | { status: 'compiling'; startTime: number }
+  | { status: 'running'; startTime: number }
+  | { status: 'stdout_chunk'; chunk: string }
+  | { status: 'stderr_chunk'; chunk: string }
+  | { status: 'error'; error: string; errorType: 'compilation' | 'runtime' | 'timeout' }
+  | { status: 'completed'; exitCode: number; executionTime: number };
+
+// Strict type for code block metadata
+interface CodeBlockMetadata {
+  language: string;
+  code: string;
+}
+
+// Strict type for file match result
+interface FileMatchResult {
+  id: string;
+  filename: string;
+  file_type: string;
+  file_url: string;
+  description: string;
+  score: number;
+}
+
+// Semantic keyword parsing result
+interface SemanticParseResult {
+  isFactorial: boolean;
+  isSquaring: boolean;
+  isCodeRequest: boolean;
+  isFileRequest: boolean;
+  detectedKeywords: string[];
+  confidence: number;
+}
+
 const HOURLY_REQUEST_LIMITS: Record<BotMode, number> = {
   quick: Infinity,
   thoughtful: 50,
@@ -30,6 +66,117 @@ async function loadSkillFile(mode: BotMode): Promise<string> {
     // Fallback to a basic prompt if file loading fails
     return `You are "aylnor" (Aylnor.ai), an elite academic AI assistant specialized for computer science students. You were proudly created by the Student Engineer Ahmed Quraiz.`;
   }
+}
+
+// Semantic keyword parsing for Programmer Mode - word-by-word analysis
+function parseSemanticKeywords(message: string, mode: BotMode): SemanticParseResult {
+  const result: SemanticParseResult = {
+    isFactorial: false,
+    isSquaring: false,
+    isCodeRequest: false,
+    isFileRequest: false,
+    detectedKeywords: [],
+    confidence: 0,
+  };
+
+  const lowerMessage = message.toLowerCase();
+  const words = lowerMessage.split(/\s+/);
+
+  // Factorial detection (مضروب)
+  const factorialKeywords = ['مضروب', 'مضروب العدد', 'factorial'];
+  const hasFactorial = factorialKeywords.some(kw => lowerMessage.includes(kw));
+  if (hasFactorial) {
+    result.isFactorial = true;
+    result.detectedKeywords.push('مضروب');
+    result.confidence += 0.9;
+  }
+
+  // Squaring detection (مربع)
+  const squaringKeywords = ['مربع', 'مربع العدد', 'square', 'تربيع'];
+  const hasSquaring = squaringKeywords.some(kw => lowerMessage.includes(kw));
+  if (hasSquaring) {
+    result.isSquaring = true;
+    result.detectedKeywords.push('مربع');
+    result.confidence += 0.9;
+  }
+
+  // Code request detection
+  const codeKeywords = ['كود', 'دالة', 'function', 'class', 'برنامج', 'code', 'اكتب', 'write'];
+  const hasCode = codeKeywords.some(kw => lowerMessage.includes(kw));
+  if (hasCode) {
+    result.isCodeRequest = true;
+    result.detectedKeywords.push('code_request');
+    result.confidence += 0.7;
+  }
+
+  // File request detection
+  const fileKeywords = ['شيت', 'ملف', 'pdf', 'تحميل', 'أريد', 'نبي', 'أعطني', 'sheet', 'file'];
+  const hasFile = fileKeywords.some(kw => lowerMessage.includes(kw));
+  if (hasFile) {
+    result.isFileRequest = true;
+    result.detectedKeywords.push('file_request');
+    result.confidence += 0.8;
+  }
+
+  // Normalize confidence
+  result.confidence = Math.min(1, result.confidence);
+
+  return result;
+}
+
+// Enhanced sliding window for Programming Mode - preserves code snippets
+function buildOptimizedContext(
+  messages: ChatMessage[],
+  mode: BotMode,
+  semanticParse: SemanticParseResult
+): ChatMessage[] {
+  const MAX_CONTEXT_MESSAGES = 5;
+  
+  if (mode !== 'programming') {
+    // For non-programming modes, use simple sliding window
+    return messages.slice(-MAX_CONTEXT_MESSAGES);
+  }
+
+  // For programming mode, preserve code snippets for continuity
+  const optimizedMessages: ChatMessage[] = [];
+  const codeBlocks: string[] = [];
+
+  // First pass: extract all code blocks from history
+  for (const msg of messages) {
+    const codeRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    const matches = [...msg.content.matchAll(codeRegex)];
+    for (const match of matches) {
+      codeBlocks.push(match[2].trim());
+    }
+  }
+
+  // Second pass: build context with code preservation
+  const recentMessages = messages.slice(-MAX_CONTEXT_MESSAGES);
+  for (const msg of recentMessages) {
+    optimizedMessages.push(msg);
+  }
+
+  // If code blocks exist in history, add a context preservation message
+  if (codeBlocks.length > 0) {
+    const codeContext = `Previous code snippets in this conversation:\n${codeBlocks.map((code, i) => `Code snippet ${i + 1}:\n${code.substring(0, 200)}...`).join('\n\n')}\n\nMaintain continuity with these code snippets.`;
+    optimizedMessages.push({
+      role: 'system',
+      content: codeContext,
+    });
+  }
+
+  // Add semantic parsing context for programming mode
+  if (semanticParse.isFactorial || semanticParse.isSquaring) {
+    const mathContext = semanticParse.isFactorial 
+      ? 'CRITICAL: User is asking for FACTORIAL (مضروب), NOT squaring. Compute n! = n * (n-1) * ... * 1.'
+      : 'CRITICAL: User is asking for SQUARING (مربع), NOT factorial. Compute n² = n * n.';
+    optimizedMessages.push({
+      role: 'system',
+      content: mathContext,
+    });
+  }
+
+  return optimizedMessages;
 }
 
 async function checkHourlyRequestLimit(userId: string, mode: BotMode): Promise<{ allowed: boolean; remainingMinutes?: number }> {
@@ -196,8 +343,12 @@ export async function POST(request: NextRequest) {
       content: msg.content,
     }));
 
-    // Apply sliding window: keep last 5 messages to prevent context loops and hallucination bugs
-    const optimizedChatHistory = chatHistory.slice(-5);
+    // Parse semantic keywords for Programmer Mode
+    const semanticParse = parseSemanticKeywords(message, mode as BotMode);
+    console.log('=== Semantic Parse Result ===', semanticParse);
+
+    // Apply enhanced sliding window with code preservation for Programming Mode
+    const optimizedChatHistory = buildOptimizedContext(chatHistory, mode as BotMode, semanticParse);
 
     // Step 1: Load all knowledge base files as context (only if needed)
     let fileContext = '';
