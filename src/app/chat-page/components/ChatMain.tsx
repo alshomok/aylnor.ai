@@ -132,7 +132,8 @@ export default function ChatMain({
   useEffect(() => {
     console.debug('ChatMain received messages prop:', messages.length, 'messages');
     console.debug('ChatMain messages:', messages);
-  }, [messages]);
+    console.debug('ChatMain activeConvId:', activeConvId);
+  }, [messages, activeConvId]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 

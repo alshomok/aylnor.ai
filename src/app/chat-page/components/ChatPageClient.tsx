@@ -86,15 +86,19 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
     async function fetchChatMessages() {
       console.debug('Fetching messages for activeConvId:', activeConvId);
+      
+      // Clear messages immediately when conversation changes
+      if (isMounted) {
+        console.debug('Clearing messages immediately before fetch');
+        setMessages([]);
+      }
+      
       if (!activeConvId) {
-        if (isMounted) {
-          console.debug('No activeConvId, clearing messages');
-          setMessages([]); // Only clear when no chat is active
-        }
+        console.debug('No activeConvId, keeping messages cleared');
         return;
       }
 
-      // Set loading state but don't reset messages yet to prevent blanking
+      // Set loading state
       if (isMounted) {
         setIsMessagesLoading(true);
       }
