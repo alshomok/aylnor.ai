@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseServer } from '@/lib/supabase';
-import { streamText, openai } from 'ai';
 import { generateAIResponseStream, BotMode, ChatMessage } from '@/lib/ai-service';
 import { findBestMatch } from '@/lib/matching-algorithm';
 import { promises as fs } from 'fs';
@@ -418,25 +417,146 @@ ${searchResults}
       }
     }
 
-    // Generate AI response with streaming using Vercel AI SDK
+    // Generate AI response with streaming using optimized chat history and dynamic skill prompt
     console.log('=== Generating AI Response ===');
     console.log('Optimized chat history length:', optimizedChatHistory.length);
     console.log('Final message length:', finalMessage.length);
     console.log('Mode:', mode);
+    console.log('Bot personality:', botPersonality);
     console.log('Skill prompt loaded from file:', skillPrompt.substring(0, 100) + '...');
 
+    let stream;
     try {
-      const result = await streamText({
-        model: openai('gpt-4o-mini'),
-        system: skillPrompt,
-        messages: optimizedChatHistory,
-      });
-
-      return result.toDataStreamResponse();
+      stream = await generateAIResponseStream(optimizedChatHistory, mode as BotMode, botPersonality, skillPrompt);
+      console.log('Stream generated successfully');
+      console.log('Stream object:', stream);
+      console.log('Stream has textStream:', 'textStream' in stream);
     } catch (error) {
       console.error('ERROR: Failed to generate AI stream:', error);
       throw error;
     }
+
+    // Collect the full response for database storage
+    let fullContent = '';
+    let codeBlock: { language: string; code: string } | undefined = undefined;
+    let provider = '';
+    let model = '';
+    let chunkCount = 0;
+
+    // Create a readable stream
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          console.log('=== Starting Stream ===');
+          
+          let hasChunks = false;
+          for await (const chunk of stream.textStream) {
+            hasChunks = true;
+            chunkCount++;
+            fullContent += chunk;
+            console.log(`Chunk ${chunkCount}:`, chunk.length, 'chars');
+            controller.enqueue(encoder.encode(chunk));
+          }
+
+          if (!hasChunks) {
+            console.error('ERROR: Stream produced zero chunks');
+            const errorMessage = 'عذراً، حدث خطأ في الاتصال بخدمة الذكاء الاصطناعي. لم يتم استلام أي رد.';
+            controller.enqueue(encoder.encode(errorMessage));
+            fullContent = errorMessage;
+          }
+
+          console.log('=== Stream Ended ===');
+          console.log('Total chunks:', chunkCount);
+          console.log('Full content length:', fullContent.length);
+
+          // Extract code block from full content
+          const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+          const matches = [...fullContent.matchAll(codeBlockRegex)];
+          if (matches.length > 0) {
+            const lastMatch = matches[matches.length - 1];
+            codeBlock = {
+              language: lastMatch[1] || 'text',
+              code: lastMatch[2].trim(),
+            };
+          }
+
+          // Format the response based on source
+          let formattedContent = fullContent;
+          if (source === 'file' && foundFile) {
+            formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${fullContent}`;
+          } else if (source === 'web') {
+            formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${fullContent}`;
+          }
+
+          // Save bot response to Supabase (skip if local conversation)
+          if (!isLocalConversation) {
+            const { error: botMessageError } = await server.from('messages').insert({
+              conversation_id: conversationId,
+              role: 'bot',
+              content: formattedContent,
+              mode: mode as BotMode,
+              code_block: codeBlock,
+            });
+
+            if (botMessageError) {
+              console.error('Error saving bot message:', botMessageError);
+            }
+
+            // Update conversation timestamp and last message
+            const { error: updateError } = await server
+              .from('conversations')
+              .update({
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', conversationId);
+
+            if (updateError) {
+              console.error('Error updating conversation:', updateError);
+            }
+          }
+
+          // Send final metadata in a single chunk to prevent separation
+          controller.enqueue(
+            encoder.encode(
+              '\n\n__METADATA__' + JSON.stringify({
+                mode,
+                codeBlock,
+                fileCard: (isFileRequest && foundFile) ? {
+                  id: foundFile.id,
+                  filename: foundFile.filename,
+                  file_type: foundFile.file_type,
+                  file_url: foundFile.file_url,
+                  description: foundFile.description,
+                } : null,
+                source,
+              })
+            )
+          );
+
+          controller.close();
+        } catch (error) {
+          console.error('Streaming error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          console.error('Error details:', errorMessage);
+          
+          // Stream error message to UI instead of failing silently
+          controller.enqueue(encoder.encode(`\n\nعذراً، حدث خطأ: ${errorMessage}`));
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readableStream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'Transfer-Encoding': 'chunked',
+      },
+    });
   } catch (error) {
     console.error('Error in POST /api/chat:', error);
     return NextResponse.json(
