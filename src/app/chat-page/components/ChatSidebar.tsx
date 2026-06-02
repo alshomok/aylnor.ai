@@ -264,6 +264,7 @@ export default function ChatSidebar({
               <button
                 key={conv.id}
                 onClick={() => {
+                  setActiveConvId(conv.id);
                   router.push(`/chat-page?id=${conv.id}`);
                   onMobileClose?.();
                 }}

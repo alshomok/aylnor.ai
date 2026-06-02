@@ -80,13 +80,13 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     setActiveConvId(chatId || '');
   }, [chatId]);
 
-  // Strict useEffect for message loading - only depends on chatId
+  // Strict useEffect for message loading - depends on activeConvId
   useEffect(() => {
     let isMounted = true;
 
     async function fetchChatMessages() {
-      console.debug('Fetching messages for chatId:', chatId);
-      if (!chatId) {
+      console.debug('Fetching messages for activeConvId:', activeConvId);
+      if (!activeConvId) {
         if (isMounted) {
           setMessages([]); // Only clear when no chat is active
         }
@@ -99,7 +99,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       }
 
       try {
-        const response = await fetch(`/api/messages?conversationId=${chatId}`);
+        const response = await fetch(`/api/messages?conversationId=${activeConvId}`);
         if (response.ok) {
           const data = await response.json();
           console.debug('API response data:', data);
@@ -145,7 +145,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     return () => {
       isMounted = false; // Prevents setting state on unmounted component during rapid switches
     };
-  }, [chatId]); // Only dependency is chatId
+  }, [activeConvId]); // Depend on activeConvId instead of chatId
 
   // Register auth state change callback for historical data hydration
   useEffect(() => {
@@ -272,8 +272,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   };
 
   const handleSelectConversation = (conversationId: string) => {
-    // Don't manually call loadMessages here - the URL sync useEffect will handle it
-    // This prevents race conditions and duplicate calls
+    // Set activeConvId directly to trigger message loading immediately
+    setActiveConvId(conversationId);
     router.push(`/chat-page?id=${conversationId}`);
     // Save to localStorage for persistence
     if (user?.id) {
