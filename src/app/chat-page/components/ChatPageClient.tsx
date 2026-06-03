@@ -1,10 +1,10 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
 import ChatSidebar from './ChatSidebar';
 import ChatMain from './ChatMain';
 import { useAuth } from '@/contexts/auth-context';
+import { supabaseChatService, Message as SupabaseMessage, Conversation as SupabaseConversation } from '@/lib/supabase-chat';
 
 export type BotMode = 'quick' | 'thoughtful' | 'programming';
 export type Theme = 'dark' | 'light';
@@ -41,7 +41,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
   const { user, onAuthStateChange } = useAuth();
   const router = useRouter();
   
-  // Local state for chat management (replacing Zustand)
+  // Local state for chat management
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string>(chatId);
@@ -61,11 +61,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
   const themeClass = theme === 'light' ? 'light' : '';
 
-  // Log chatId prop changes
-  useEffect(() => {
-    console.debug('ChatPageClient chatId prop changed:', chatId);
-  }, [chatId]);
-
   // Load user data from Supabase Auth
   useEffect(() => {
     if (user?.user_metadata?.full_name) {
@@ -75,141 +70,89 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
   }, [user]);
 
-  // Sync activeConvId with chatId prop (from URL) - with safety check
+  // Sync activeConvId with chatId prop (from URL)
   useEffect(() => {
     if (chatId && chatId !== activeConvId) {
-      console.debug('Syncing activeConvId from chatId:', chatId);
       setActiveConvId(chatId);
     }
   }, [chatId, activeConvId]);
 
-  // Strict useEffect for message loading - depends on activeConvId
+  // Load conversations when user changes
   useEffect(() => {
-    const abortController = new AbortController();
-    const signal = abortController.signal;
-
-    async function fetchChatMessages() {
-      console.debug('=== Fetching Messages ===');
-      console.debug('ActiveConvId:', activeConvId);
-      
-      if (!activeConvId) {
-        console.debug('No activeConvId, clearing messages');
-        setMessages([]);
-        return;
-      }
-
-      // Set loading state
-      setIsMessagesLoading(true);
-
-      try {
-        const response = await fetch(
-          `/api/messages?conversationId=${activeConvId}`,
-          { signal }
-        );
-
-        if (signal.aborted) return;
-
-        if (response.ok) {
-          const data = await response.json();
-          console.debug('API response data:', data);
-          
-          if (signal.aborted) return;
-
-          // Safe handling for empty or undefined messages array
-          const messagesArray = Array.isArray(data.messages) ? data.messages : [];
-          console.debug('Messages array length:', messagesArray.length);
-          
-          // Additional safety check: ensure each message is an object before mapping
-          const validMessages = messagesArray.filter((msg: any) => msg && typeof msg === 'object');
-          console.debug('Valid messages count:', validMessages.length);
-          
-          const formattedMessages: Message[] = validMessages.map((msg: any) => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            mode: msg.mode,
-            timestamp: new Date(msg.created_at).toLocaleTimeString('ar-SA', {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-            codeBlock: msg.code_block,
-          }));
-          console.debug('Formatted messages:', formattedMessages);
-          console.debug('Setting messages state with:', formattedMessages.length, 'messages');
-          
-          // Save to localStorage as backup
-          try {
-            localStorage.setItem(`messages_${activeConvId}`, JSON.stringify(formattedMessages));
-            console.debug('Messages saved to localStorage');
-          } catch (e) {
-            console.warn('Failed to save messages to localStorage:', e);
-          }
-          
-          // Only clear and set messages after successful fetch
-          setMessages(formattedMessages);
-          console.debug('Messages state set successfully');
-        } else {
-          console.error('API response not OK:', response.status);
-          // Try to load from localStorage as fallback
-          try {
-            const cachedMessages = localStorage.getItem(`messages_${activeConvId}`);
-            if (cachedMessages) {
-              const parsedMessages = JSON.parse(cachedMessages);
-              setMessages(parsedMessages);
-              console.debug('Loaded messages from localStorage fallback');
-            }
-          } catch (e) {
-            console.warn('Failed to load messages from localStorage:', e);
-          }
-        }
-      } catch (error: any) {
-        if (error.name === 'AbortError') return;
-        console.error('Error loading messages:', error);
-        // Try to load from localStorage as fallback
-        try {
-          const cachedMessages = localStorage.getItem(`messages_${activeConvId}`);
-          if (cachedMessages) {
-            const parsedMessages = JSON.parse(cachedMessages);
-            setMessages(parsedMessages);
-            console.debug('Loaded messages from localStorage fallback after error');
-          }
-        } catch (e) {
-          console.warn('Failed to load messages from localStorage:', e);
-        }
-      } finally {
-        if (!signal.aborted) {
-          setIsMessagesLoading(false);
-        }
-      }
+    if (user?.id) {
+      loadConversations();
     }
+  }, [user?.id]);
 
-    fetchChatMessages();
-
-    return () => abortController.abort();
+  // Load messages when activeConvId changes
+  useEffect(() => {
+    if (activeConvId) {
+      loadMessages();
+    }
   }, [activeConvId]);
 
-  // Register auth state change callback for historical data hydration
+  // Load conversations from Supabase
+  const loadConversations = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const convs = await supabaseChatService.getConversations(user.id);
+      const formattedConversations: Conversation[] = convs.map(conv => ({
+        id: conv.id,
+        title: conv.title,
+        lastMessage: '',
+        timestamp: new Date(conv.updated_at).toLocaleTimeString('ar-SA', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        mode: conv.mode,
+      }));
+      setConversations(formattedConversations);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+    }
+  };
+
+  // Load messages from Supabase
+  const loadMessages = async () => {
+    if (!activeConvId) {
+      setMessages([]);
+      return;
+    }
+
+    setIsMessagesLoading(true);
+    try {
+      const msgs = await supabaseChatService.getMessages(activeConvId);
+      const formattedMessages: Message[] = msgs.map(msg => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        mode: msg.mode,
+        timestamp: new Date(msg.created_at).toLocaleTimeString('ar-SA', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        codeBlock: msg.code_block,
+      }));
+      setMessages(formattedMessages);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      setMessages([]);
+    } finally {
+      setIsMessagesLoading(false);
+    }
+  };
+
+  // Register auth state change callback
   useEffect(() => {
     if (onAuthStateChange) {
       const handleAuthStateChange = (event: string, session: any) => {
-        console.log('Auth state changed:', event, 'Session:', !!session);
-
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           if (session?.user?.id) {
-            console.log('User signed in, loading historical data');
-            // Restore last active conversation from localStorage
-            const savedConvId = localStorage.getItem(`lastConvId_${session.user.id}`) || undefined;
-            if (savedConvId) {
-              console.log('Restoring last conversation:', savedConvId);
-              setActiveConvId(savedConvId);
-              router.push(`/chat-page?id=${savedConvId}`);
-            }
-            // Conversations are now fetched by Sidebar component
+            loadConversations();
             setIsLoading(false);
           }
         } else if (event === 'SIGNED_OUT') {
-          console.log('User signed out, clearing all local state');
-          // Clear all local state
           setMessages([]);
           setConversations([]);
           setActiveConvId('');
@@ -219,21 +162,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
 
       onAuthStateChange(handleAuthStateChange);
     }
-  }, [onAuthStateChange, router]);
-
-  // Load conversations whenever user changes (login/logout) - fallback for direct user changes
-  useEffect(() => {
-    console.log('User ID changed:', user?.id);
-    if (user?.id) {
-      // This is handled by auth state change callback and Sidebar component
-      const savedConvId = localStorage.getItem(`lastConvId_${user.id}`) || undefined;
-      if (savedConvId && !isLoading) {
-        setActiveConvId(savedConvId);
-        router.push(`/chat-page?id=${savedConvId}`);
-      }
-      setIsLoading(false);
-    }
-  }, [user?.id, router, isLoading]);
+  }, [onAuthStateChange]);
 
   const createNewConversation = async (): Promise<string | null> => {
     if (!user?.id) {
@@ -242,87 +171,60 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
 
     try {
-      const response = await fetch('/api/conversations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          userEmail: user.email,
-          title: 'محادثة جديدة',
-          mode: activeMode,
-        }),
-      });
+      const newConv = await supabaseChatService.createConversation(
+        user.id,
+        'محادثة جديدة',
+        activeMode
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Failed to create conversation:', response.status, errorData);
-        // Use fallback local state if error - preserve existing conversations
-        const newId = `conv-${Date.now()}`;
-        const newConv: Conversation = {
-          id: newId,
-          title: 'محادثة جديدة',
+      if (newConv) {
+        const formattedConv: Conversation = {
+          id: newConv.id,
+          title: newConv.title,
           lastMessage: '',
           timestamp: 'الآن',
-          mode: activeMode,
+          mode: newConv.mode,
         };
-        setConversations([newConv, ...conversations]);
-        setActiveConvId(newId);
-        setMessages([]); // Clear messages when creating new conversation
-        router.push(`/chat-page?id=${newId}`);
-        return newId;
+        setConversations([formattedConv, ...conversations]);
+        setActiveConvId(newConv.id);
+        setMessages([]);
+        router.push(`/chat-page?id=${newConv.id}`);
+        return newConv.id;
       }
-
-      const data = await response.json();
-      const conversationId = data.conversation.id;
-      const newConv: Conversation = {
-        id: conversationId,
-        title: data.conversation.title,
-        lastMessage: '',
-        timestamp: 'الآن',
-        mode: data.conversation.mode,
-      };
-      // Preserve existing conversations by adding new one to the beginning
-      setConversations([newConv, ...conversations]);
-      setActiveConvId(conversationId);
-      setMessages([]); // Clear messages when creating new conversation
-      // Save to localStorage for persistence
-      if (user?.id) {
-        localStorage.setItem(`lastConvId_${user.id}`, conversationId);
-      }
-      router.push(`/chat-page?id=${conversationId}`);
-      console.debug('Conversation created successfully:', conversationId);
-      return conversationId;
+      return null;
     } catch (error) {
       console.error('Error creating conversation:', error);
-      // Fallback to local state - preserve existing conversations
-      const newId = `conv-${Date.now()}`;
-      const newConv: Conversation = {
-        id: newId,
-        title: 'محادثة جديدة',
-        lastMessage: '',
-        timestamp: 'الآن',
-        mode: activeMode,
-      };
-      setConversations([newConv, ...conversations]);
-      setActiveConvId(newId);
-      setMessages([]); // Clear messages when creating new conversation
-      router.push(`/chat-page?id=${newId}`);
-      console.debug('Using fallback conversation ID:', newId);
-      return newId;
+      return null;
     }
   };
 
   const handleSelectConversation = (conversationId: string) => {
-    // Prevent duplicate updates
     if (conversationId === activeConvId) return;
-    
-    // Set activeConvId directly to trigger message loading immediately
     setActiveConvId(conversationId);
     router.push(`/chat-page?id=${conversationId}`);
-    // Save to localStorage for persistence
-    if (user?.id) {
-      localStorage.setItem(`lastConvId_${user.id}`, conversationId);
-    }
+  };
+
+  const handleSendMessage = async (content: string) => {
+    if (!user?.id || !activeConvId) return;
+
+    // Add user message to state
+    const userMessage: Message = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content,
+      mode: activeMode,
+      timestamp: new Date().toLocaleTimeString('ar-SA', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    };
+    setMessages([...messages, userMessage]);
+
+    // Save user message to Supabase
+    await supabaseChatService.saveMessage(activeConvId, 'user', content, activeMode);
+
+    // Update conversation timestamp
+    await supabaseChatService.updateConversationTimestamp(activeConvId);
   };
 
   if (isLoading) {
@@ -413,6 +315,7 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           conversations={conversations}
           setConversations={setConversations}
           onCreateConversation={createNewConversation}
+          onSendMessage={handleSendMessage}
           mobileSidebarOpen={mobileSidebarOpen}
           onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
           mobileTab={mobileTab}

@@ -208,6 +208,32 @@ export type Database = {
           created_at?: string;
         };
       };
+      educational_files: {
+        Row: {
+          id: number;
+          title: string;
+          description: string | null;
+          drive_id: string;
+          download_link: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          title: string;
+          description?: string;
+          drive_id: string;
+          download_link?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          title?: string;
+          description?: string;
+          drive_id?: string;
+          download_link?: string;
+          created_at?: string;
+        };
+      };
     };
   };
 };

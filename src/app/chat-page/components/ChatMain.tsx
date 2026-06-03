@@ -38,6 +38,7 @@ interface ChatMainProps {
   conversations: Conversation[];
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
   onCreateConversation: () => Promise<string | null>;
+  onSendMessage?: (content: string) => Promise<void>;
   mobileSidebarOpen: boolean;
   onToggleMobileSidebar: () => void;
   mobileTab: 'chat' | 'code';
@@ -113,6 +114,7 @@ export default function ChatMain({
   conversations,
   setConversations,
   onCreateConversation,
+  onSendMessage,
   mobileSidebarOpen,
   onToggleMobileSidebar,
   mobileTab,
@@ -213,6 +215,11 @@ export default function ChatMain({
       timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages((prev) => [...prev, userMsg]);
+
+    // Save to Supabase using new service
+    if (onSendMessage) {
+      await onSendMessage(content);
+    }
 
     try {
       const response = await fetch('/api/chat', {
