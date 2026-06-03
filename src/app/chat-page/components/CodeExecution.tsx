@@ -74,14 +74,18 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
       });
 
       const data = await response.json();
+      console.log('Execution response:', data);
 
-      if (data.success) {
+      if (!data.isError) {
         setOutput(data.output || 'تم التنفيذ بنجاح');
       } else {
         setError(data.error || 'حدث خطأ أثناء التنفيذ');
+        setOutput(data.error || data.details || 'حدث خطأ أثناء التنفيذ');
       }
     } catch (err) {
       setError('فشل الاتصال بخادم التنفيذ');
+      setOutput('فشل الاتصال بخادم التنفيذ');
+      console.error('Execution error:', err);
     } finally {
       setIsExecuting(false);
     }

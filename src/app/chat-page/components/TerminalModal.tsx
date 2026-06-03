@@ -153,6 +153,7 @@ export function CMDWindow({
               onChange={(e) => onStdinChange(e.target.value)}
               onKeyDown={onKeyDown}
               disabled={isExecuting}
+              autoFocus={true}
               className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 text-white text-sm font-mono ml-1"
               placeholder="Enter input..."
               style={{
