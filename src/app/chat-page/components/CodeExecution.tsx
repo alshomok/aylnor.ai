@@ -1,8 +1,9 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Copy, Check, AlertTriangle, ExternalLink, Terminal } from 'lucide-react';
+import { Play, Copy, Check, AlertTriangle, ExternalLink, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import InteractiveInput from './InteractiveInput';
 import TerminalModal from './TerminalModal';
+import { CMDWindow } from './TerminalModal';
 
 interface CodeExecutionProps {
   code: string;
@@ -28,6 +29,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
   const [inputCallback, setInputCallback] = useState<((value: string) => void) | null>(null);
   const [stdin, setStdin] = useState('');
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [isInlineTerminal, setIsInlineTerminal] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pyodideRef = useRef<any>(null);
 
@@ -55,8 +57,41 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
   };
 
   const executeCode = async () => {
-    // Open terminal modal for all languages
-    setIsTerminalOpen(true);
+    setIsInlineTerminal(true);
+    setIsExecuting(true);
+    setOutput('');
+    setError('');
+
+    try {
+      const response = await fetch('/api/run-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          language,
+          stdin: stdin || '',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setOutput(data.output || 'تم التنفيذ بنجاح');
+      } else {
+        setError(data.error || 'حدث خطأ أثناء التنفيذ');
+      }
+    } catch (err) {
+      setError('فشل الاتصال بخادم التنفيذ');
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      executeCode();
+    }
   };
 
   const isSupported = SUPPORTED_LANGUAGES.includes(language.toLowerCase());
@@ -81,7 +116,7 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
             {copied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
           </button>
           <button
-            onClick={executeCode}
+            onClick={() => setIsInlineTerminal(!isInlineTerminal)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-royal-blue hover:bg-royal-blue/80 text-white text-xs font-medium rounded transition-colors"
             title="تشغيل الكود"
           >
@@ -91,20 +126,31 @@ export default function CodeExecution({ code, language }: CodeExecutionProps) {
         </div>
       </div>
 
+      {/* Inline Terminal */}
+      {isInlineTerminal && (
+        <div className="border-t border-border">
+          <CMDWindow
+            title={`C:\\Windows\\System32\\cmd.exe - ${language.toUpperCase()} Compiler`}
+            code={code}
+            output={output}
+            stdin={stdin}
+            showCode={true}
+            showOutput={!!output}
+            isExecuting={isExecuting}
+            onStdinChange={setStdin}
+            onKeyDown={handleKeyDown}
+            onExecute={executeCode}
+            language={language}
+          />
+        </div>
+      )}
+
       {/* Info */}
       <div className="px-4 py-2 bg-muted/50 border-t border-border">
         <p className="text-xs text-muted-foreground">
-          Powered by Hugging Face Space • Click تشغيل to open terminal
+          Powered by Hugging Face Space • Click تشغيل to open inline terminal
         </p>
       </div>
-
-      {/* Terminal Modal */}
-      <TerminalModal
-        isOpen={isTerminalOpen}
-        onClose={() => setIsTerminalOpen(false)}
-        code={code}
-        language={language}
-      />
     </div>
   );
 }

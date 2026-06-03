@@ -12,7 +12,7 @@ interface TerminalModalProps {
 type ExecutionStatus = 'idle' | 'running' | 'success' | 'error';
 
 // CMD Window Component - VS Code 2008 style
-function CMDWindow({ 
+export function CMDWindow({ 
   title = "C:\\Windows\\System32\\cmd.exe",
   code,
   output,
