@@ -11,19 +11,173 @@ interface TerminalModalProps {
 
 type ExecutionStatus = 'idle' | 'running' | 'success' | 'error';
 
+// CMD Window Component - VS Code 2008 style
+function CMDWindow({ 
+  title = "C:\\Windows\\System32\\cmd.exe",
+  code,
+  output,
+  stdin,
+  showCode = true,
+  showOutput = true,
+  isExecuting,
+  onExecute,
+  onStdinChange,
+  onKeyDown
+}: {
+  title?: string;
+  code?: string;
+  output?: string;
+  stdin?: string;
+  showCode?: boolean;
+  showOutput?: boolean;
+  isExecuting?: boolean;
+  onExecute?: () => void;
+  onStdinChange?: (value: string) => void;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
+}) {
+  const [displayedOutput, setDisplayedOutput] = useState("");
+  const [showCursor, setShowCursor] = useState(true);
+  const [isTyping, setIsTyping] = useState(false);
+  const outputRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Cursor blinking effect
+  useEffect(() => {
+    const cursorInterval = setInterval(() => {
+      setShowCursor((prev) => !prev);
+    }, 530);
+    return () => clearInterval(cursorInterval);
+  }, []);
+
+  // Typing effect for output
+  useEffect(() => {
+    if (output && showOutput) {
+      setDisplayedOutput("");
+      setIsTyping(true);
+      let index = 0;
+      const interval = setInterval(() => {
+        if (index < output.length) {
+          setDisplayedOutput(output.slice(0, index + 1));
+          index++;
+        } else {
+          clearInterval(interval);
+          setIsTyping(false);
+        }
+      }, 15);
+      return () => clearInterval(interval);
+    }
+  }, [output, showOutput]);
+
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [displayedOutput]);
+
+  return (
+    <div className="bg-black rounded-none overflow-hidden shadow-2xl border border-neutral-700 w-full">
+      {/* Title Bar */}
+      <div className="bg-gradient-to-r from-royal-blue to-gold px-2 py-1 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4">
+            <svg viewBox="0 0 16 16" fill="none" className="w-full h-full">
+              <rect width="16" height="16" fill="#0c0c0c"/>
+              <text x="2" y="12" fontSize="10" fill="#ccc" fontFamily="Consolas">C:</text>
+            </svg>
+          </div>
+          <span className="text-white text-xs font-mono">{title}</span>
+        </div>
+        <div className="flex">
+          <button className="w-11 h-6 hover:bg-white/10 text-white/70 text-xs flex items-center justify-center">
+            ─
+          </button>
+          <button className="w-11 h-6 hover:bg-white/10 text-white/70 text-xs flex items-center justify-center">
+            □
+          </button>
+          <button className="w-11 h-6 hover:bg-red-600 text-white/70 hover:text-white text-xs flex items-center justify-center">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {/* CMD Content */}
+      <div
+        ref={outputRef}
+        className="p-3 min-h-[300px] max-h-[500px] overflow-y-auto"
+        style={{ 
+          backgroundColor: "#0c0c0c",
+          fontFamily: "'Consolas', 'Courier New', monospace"
+        }}
+      >
+        {/* Display Code */}
+        {showCode && code && (
+          <div className="mb-4">
+            <div className="text-neutral-500 text-xs mb-1">
+              C:\Users\User\Desktop&gt;type program.{language === 'python' ? 'py' : language === 'javascript' ? 'js' : 'cpp'}
+            </div>
+            <pre className="text-neutral-300 text-sm leading-relaxed whitespace-pre-wrap">
+              {code}
+            </pre>
+            <div className="text-neutral-500 text-xs mt-3">
+              C:\Users\User\Desktop&gt;program.exe
+            </div>
+          </div>
+        )}
+
+        {/* Display Output */}
+        {showOutput && output && (
+          <div>
+            {!showCode && (
+              <div className="text-neutral-500 text-xs mb-2">
+                C:\Users\User\Desktop&gt;program.exe
+              </div>
+            )}
+            <pre className="text-neutral-200 text-sm leading-relaxed whitespace-pre-wrap">
+              {displayedOutput}
+            </pre>
+          </div>
+        )}
+
+        {/* Cursor */}
+        <div className="flex items-center mt-2">
+          <span className="text-neutral-500 text-sm">
+            {!isTyping && "C:\\Users\\User\\Desktop>"}
+          </span>
+          {onStdinChange && (
+            <input
+              ref={inputRef}
+              type="text"
+              value={stdin}
+              onChange={(e) => onStdinChange(e.target.value)}
+              onKeyDown={onKeyDown}
+              disabled={isExecuting}
+              className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 text-white text-sm font-mono ml-1"
+              placeholder="Enter input..."
+              style={{
+                direction: 'ltr' as const,
+                textAlign: 'left' as const,
+                unicodeBidi: 'bidi-override' as const,
+              }}
+            />
+          )}
+          {!onStdinChange && (
+            <span
+              className={`w-2 h-4 bg-neutral-300 ml-0.5 inline-block ${
+                showCursor ? "opacity-100" : "opacity-0"
+              }`}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TerminalModal({ isOpen, onClose, code, language }: TerminalModalProps) {
   const [output, setOutput] = useState('');
   const [stdin, setStdin] = useState('');
   const [status, setStatus] = useState<ExecutionStatus>('idle');
   const [isExecuting, setIsExecuting] = useState(false);
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isOpen]);
 
   const handleRunCode = async () => {
     setIsExecuting(true);
@@ -92,7 +246,7 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-4xl bg-black rounded-lg border border-gray-800 shadow-2xl flex flex-col max-h-[80vh] relative">
+      <div className="w-full max-w-4xl flex flex-col max-h-[80vh] relative">
         {/* Mobile Close Button */}
         <button
           onClick={onClose}
@@ -101,83 +255,34 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
           <X size={20} />
         </button>
 
-        {/* Header Bar */}
-        <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
-          <span className="text-xs text-gray-400 font-mono">Console Window - CMD</span>
+        {/* CMD Window */}
+        <CMDWindow
+          title={`C:\\Windows\\System32\\cmd.exe - ${language.toUpperCase()} Compiler`}
+          code={code}
+          output={output}
+          stdin={stdin}
+          showCode={true}
+          showOutput={!!output}
+          isExecuting={isExecuting}
+          onStdinChange={setStdin}
+          onKeyDown={handleKeyDown}
+        />
+
+        {/* Execute Button */}
+        <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            className="px-4 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors"
           >
-            <X size={16} />
+            إغلاق
           </button>
-        </div>
-
-        {/* Terminal Body */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {/* Output Area - Classic Black Console */}
-          <div
-            ref={terminalRef}
-            className="flex-1 overflow-y-auto p-4 font-mono text-sm bg-[#0c0c0c] h-[300px]"
-            style={{
-              direction: 'ltr' as const,
-              textAlign: 'left' as const,
-              unicodeBidi: 'bidi-override' as const,
-            }}
+          <button
+            onClick={handleRunCode}
+            disabled={isExecuting}
+            className="px-4 py-2 bg-gradient-to-r from-royal-blue to-gold text-white rounded-lg hover:shadow-lg hover:shadow-royal-blue/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
-            {output ? (
-              <div
-                className={`${
-                  status === 'error' ? 'text-red-400' : 'text-[#00ff00]'
-                }`}
-                style={{
-                  direction: 'ltr' as const,
-                  textAlign: 'left' as const,
-                  unicodeBidi: 'bidi-override' as const,
-                }}
-              >
-                {output.split('\n').map((line, index) => (
-                  <div key={index} className="whitespace-pre-wrap">
-                    {line}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div
-                className="text-white"
-                style={{
-                  direction: 'ltr' as const,
-                  textAlign: 'left' as const,
-                  unicodeBidi: 'bidi-override' as const,
-                }}
-              >
-                <p className="text-xs mb-2">Microsoft Windows [Version 10.0.19045.4291]</p>
-                <p className="text-xs">(c) Aylnor Corporation. All rights reserved.</p>
-                <p className="text-xs mt-4">Aylnor Console v1.0.0</p>
-                <p className="text-xs mt-2">Ready to execute code...</p>
-                <p className="text-xs mt-2">Enter input below and press Enter to run.</p>
-              </div>
-            )}
-          </div>
-
-          {/* Input Row */}
-          <div className="flex items-center px-4 py-2 bg-gray-900 border-t border-gray-800">
-            <span className="text-[#00ff00] font-mono text-sm mr-2">C:&gt;</span>
-            <input
-              ref={inputRef}
-              type="text"
-              value={stdin}
-              onChange={(e) => setStdin(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Enter input (e.g., 5 10 15)..."
-              disabled={isExecuting}
-              className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 text-white placeholder-gray-600 text-sm font-mono w-full"
-              style={{
-                direction: 'ltr' as const,
-                textAlign: 'left' as const,
-                unicodeBidi: 'bidi-override' as const,
-              }}
-            />
-          </div>
+            {isExecuting ? 'جاري التنفيذ...' : 'تشغيل'}
+          </button>
         </div>
       </div>
     </div>

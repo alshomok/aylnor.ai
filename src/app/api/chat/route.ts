@@ -360,6 +360,12 @@ export async function POST(request: NextRequest) {
     const fileRequestKeywords = ['شيت', 'ملف', 'pdf', 'تحميل', 'أريد', 'نبي', 'أعطني', 'أرجو', 'لو سمحت', 'ممكن', 'هل يوجد'];
     isFileRequest = fileRequestKeywords.some(keyword => message.toLowerCase().includes(keyword));
 
+    console.log('=== File Request Debug ===');
+    console.log('User message:', message);
+    console.log('Mode:', mode);
+    console.log('Is file request:', isFileRequest);
+    console.log('Detected keywords:', fileRequestKeywords.filter(k => message.toLowerCase().includes(k)));
+
     // Only load knowledge base files if it's a file request
     if (isFileRequest) {
       try {
@@ -420,11 +426,13 @@ export async function POST(request: NextRequest) {
       message.toLowerCase().includes(keyword)
     );
 
-    console.log('=== File Search Debug ===');
+    console.log('=== Educational File Search Debug ===');
     console.log('User message:', message);
-    console.log('Is file request:', isEducationalFileRequest);
+    console.log('Mode:', mode);
+    console.log('Is educational file request:', isEducationalFileRequest);
     console.log('Detected keywords:', educationalFileKeywords.filter(k => message.toLowerCase().includes(k)));
 
+    // Search educational files for ALL modes, not just when fileContext is empty
     if (isEducationalFileRequest) {
       try {
         // Extract key terms from the message for better matching
@@ -505,11 +513,12 @@ export async function POST(request: NextRequest) {
           console.log('Number of matching files:', matchingFiles.length);
           console.log('Matching files:', matchingFiles.map(f => f.title));
           
-          // Add all matching files to context
+          // Add all matching files to context with Markdown links for FileDownloadCard
           fileContext += `\n\n---\n🎯 ملفات تعليمية مطابقة من Google Drive:\n`;
           matchingFiles.forEach((file, index) => {
             const downloadLink = `https://drive.google.com/uc?export=download&id=${file.drive_id}`;
-            fileContext += `\n${index + 1}. العنوان: ${file.title}\n   الوصف: ${file.description || 'لا يوجد وصف'}\n   📥 رابط التحميل: ${downloadLink}\n`;
+            // Use Markdown link format: [title](download_url) for FileDownloadCard rendering
+            fileContext += `\n${index + 1}. [${file.title}](${downloadLink})\n   الوصف: ${file.description || 'لا يوجد وصف'}\n`;
           });
           
           fileContext += `\n⚠️ تعليمات حرجة: الطالب يطلب ملفاً محدداً وجدنا ${matchingFiles.length} ملفات مطابقة في قاعدة البيانات. يجب عليك تقديم روابط التحميل لجميع الملفات المذكورة أعلاه بصيغة Markdown. لا تشرح الموضوع ولا تولد أي كود أو شروحات عامة إلا إذا طلب الطالب ذلك صراحة. الأولوية القصوى هي تقديم روابط التحميل لجميع الملفات المتاحة.\n---`;
@@ -555,6 +564,10 @@ ${searchResults}
 
     // Save user message to Supabase (skip if local conversation)
     if (!isLocalConversation) {
+      console.log('=== Saving User Message to Supabase ===');
+      console.log('Conversation ID:', conversationId);
+      console.log('Message length:', message.length);
+      
       const { error: userMessageError } = await server.from('messages').insert({
         conversation_id: conversationId,
         role: 'user',
@@ -563,8 +576,15 @@ ${searchResults}
       });
 
       if (userMessageError) {
-        console.error('Error saving user message:', userMessageError);
+        console.error('=== Error Saving User Message ===');
+        console.error('Error:', userMessageError);
+        console.error('Message:', userMessageError.message);
+        console.error('Details:', userMessageError.details);
+        console.error('Hint:', userMessageError.hint);
+        console.error('Code:', userMessageError.code);
         // Continue anyway to generate response
+      } else {
+        console.log('=== User Message Saved Successfully ===');
       }
     }
 
@@ -651,6 +671,10 @@ ${searchResults}
 
           // Save bot response to Supabase (skip if local conversation)
           if (!isLocalConversation) {
+            console.log('=== Saving Bot Message to Supabase ===');
+            console.log('Conversation ID:', conversationId);
+            console.log('Content length:', formattedContent.length);
+            
             const { error: botMessageError } = await server.from('messages').insert({
               conversation_id: conversationId,
               role: 'bot',
@@ -660,7 +684,14 @@ ${searchResults}
             });
 
             if (botMessageError) {
-              console.error('Error saving bot message:', botMessageError);
+              console.error('=== Error Saving Bot Message ===');
+              console.error('Error:', botMessageError);
+              console.error('Message:', botMessageError.message);
+              console.error('Details:', botMessageError.details);
+              console.error('Hint:', botMessageError.hint);
+              console.error('Code:', botMessageError.code);
+            } else {
+              console.log('=== Bot Message Saved Successfully ===');
             }
 
             // Update conversation timestamp and last message
@@ -672,7 +703,10 @@ ${searchResults}
               .eq('id', conversationId);
 
             if (updateError) {
-              console.error('Error updating conversation:', updateError);
+              console.error('=== Error Updating Conversation ===');
+              console.error('Error:', updateError);
+            } else {
+              console.log('=== Conversation Updated Successfully ===');
             }
           }
 

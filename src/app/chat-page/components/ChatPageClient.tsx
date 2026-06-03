@@ -75,12 +75,13 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
   }, [user]);
 
-  // Sync activeConvId with chatId prop (from URL)
+  // Sync activeConvId with chatId prop (from URL) - with safety check
   useEffect(() => {
     if (chatId && chatId !== activeConvId) {
+      console.debug('Syncing activeConvId from chatId:', chatId);
       setActiveConvId(chatId);
     }
-  }, [chatId]);
+  }, [chatId, activeConvId]);
 
   // Strict useEffect for message loading - depends on activeConvId
   useEffect(() => {
@@ -90,11 +91,9 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     async function fetchChatMessages() {
       console.debug('Fetching messages for activeConvId:', activeConvId);
       
-      // Clear messages immediately when conversation changes
-      setMessages([]);
-      
       if (!activeConvId) {
-        console.debug('No activeConvId, keeping messages cleared');
+        console.debug('No activeConvId, clearing messages');
+        setMessages([]);
         return;
       }
 
@@ -136,16 +135,20 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           }));
           console.debug('Formatted messages:', formattedMessages);
           console.debug('Setting messages state with:', formattedMessages.length, 'messages');
+          
+          // Only clear and set messages after successful fetch
           setMessages(formattedMessages);
           console.debug('Messages state set successfully');
         } else {
           console.error('API response not OK:', response.status);
-          setMessages([]);
+          // Don't clear messages on error - keep existing messages
+          console.debug('Keeping existing messages due to API error');
         }
       } catch (error: any) {
         if (error.name === 'AbortError') return;
         console.error('Error loading messages:', error);
-        setMessages([]);
+        // Don't clear messages on error - keep existing messages
+        console.debug('Keeping existing messages due to fetch error');
       } finally {
         if (!signal.aborted) {
           setIsMessagesLoading(false);
