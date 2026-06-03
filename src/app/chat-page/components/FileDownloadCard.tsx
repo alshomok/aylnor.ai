@@ -41,51 +41,29 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
     }
   };
 
-  const handleDownload = async (e: React.MouseEvent) => {
+  const handleDownload = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    try {
-      // محاولة تحميل الملف باستخدام fetch
-      const response = await fetch(convertToDirectDownload(downloadUrl));
-      
-      if (!response.ok) {
-        throw new Error('Failed to download file');
-      }
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      
-      // إنشاء رابط تحميل مخفي
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      
-      // تنظيف
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
+    // استخدام iframe مخفي للتحميل دون فتح صفحة جديدة
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.style.position = 'absolute';
+    iframe.style.left = '-9999px';
+    iframe.src = convertToDirectDownload(downloadUrl);
+    document.body.appendChild(iframe);
+    
+    // محاكاة عملية التحميل
+    setTimeout(() => {
       setIsLoading(false);
       setIsComplete(true);
       
-      // إعادة تعيين بعد 2 ثانية
+      // تنظيف iframe بعد التحميل
       setTimeout(() => {
+        document.body.removeChild(iframe);
         setIsComplete(false);
       }, 2000);
-    } catch (error) {
-      // إذا فشل fetch، استخدم window.open كـ fallback
-      console.error('Download failed, using fallback:', error);
-      setIsLoading(false);
-      setIsComplete(true);
-      
-      window.open(convertToDirectDownload(downloadUrl), '_blank');
-      
-      setTimeout(() => {
-        setIsComplete(false);
-      }, 2000);
-    }
+    }, 1500);
   };
 
   const directDownloadUrl = convertToDirectDownload(downloadUrl);

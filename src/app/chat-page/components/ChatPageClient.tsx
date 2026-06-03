@@ -89,7 +89,8 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     const signal = abortController.signal;
 
     async function fetchChatMessages() {
-      console.debug('Fetching messages for activeConvId:', activeConvId);
+      console.debug('=== Fetching Messages ===');
+      console.debug('ActiveConvId:', activeConvId);
       
       if (!activeConvId) {
         console.debug('No activeConvId, clearing messages');
@@ -136,19 +137,45 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
           console.debug('Formatted messages:', formattedMessages);
           console.debug('Setting messages state with:', formattedMessages.length, 'messages');
           
+          // Save to localStorage as backup
+          try {
+            localStorage.setItem(`messages_${activeConvId}`, JSON.stringify(formattedMessages));
+            console.debug('Messages saved to localStorage');
+          } catch (e) {
+            console.warn('Failed to save messages to localStorage:', e);
+          }
+          
           // Only clear and set messages after successful fetch
           setMessages(formattedMessages);
           console.debug('Messages state set successfully');
         } else {
           console.error('API response not OK:', response.status);
-          // Don't clear messages on error - keep existing messages
-          console.debug('Keeping existing messages due to API error');
+          // Try to load from localStorage as fallback
+          try {
+            const cachedMessages = localStorage.getItem(`messages_${activeConvId}`);
+            if (cachedMessages) {
+              const parsedMessages = JSON.parse(cachedMessages);
+              setMessages(parsedMessages);
+              console.debug('Loaded messages from localStorage fallback');
+            }
+          } catch (e) {
+            console.warn('Failed to load messages from localStorage:', e);
+          }
         }
       } catch (error: any) {
         if (error.name === 'AbortError') return;
         console.error('Error loading messages:', error);
-        // Don't clear messages on error - keep existing messages
-        console.debug('Keeping existing messages due to fetch error');
+        // Try to load from localStorage as fallback
+        try {
+          const cachedMessages = localStorage.getItem(`messages_${activeConvId}`);
+          if (cachedMessages) {
+            const parsedMessages = JSON.parse(cachedMessages);
+            setMessages(parsedMessages);
+            console.debug('Loaded messages from localStorage fallback after error');
+          }
+        } catch (e) {
+          console.warn('Failed to load messages from localStorage:', e);
+        }
       } finally {
         if (!signal.aborted) {
           setIsMessagesLoading(false);

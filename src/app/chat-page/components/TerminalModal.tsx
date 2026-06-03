@@ -271,20 +271,13 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
           language={language}
         />
 
-        {/* Execute Button */}
-        <div className="mt-4 flex justify-end gap-2">
+        {/* Close Button */}
+        <div className="mt-4 flex justify-end">
           <button
             onClick={onClose}
             className="px-4 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors"
           >
             إغلاق
-          </button>
-          <button
-            onClick={handleRunCode}
-            disabled={isExecuting}
-            className="px-4 py-2 bg-gradient-to-r from-royal-blue to-gold text-white rounded-lg hover:shadow-lg hover:shadow-royal-blue/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            {isExecuting ? 'جاري التنفيذ...' : 'تشغيل'}
           </button>
         </div>
       </div>
