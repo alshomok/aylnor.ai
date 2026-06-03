@@ -22,7 +22,8 @@ function CMDWindow({
   isExecuting,
   onExecute,
   onStdinChange,
-  onKeyDown
+  onKeyDown,
+  language = 'cpp'
 }: {
   title?: string;
   code?: string;
@@ -34,6 +35,7 @@ function CMDWindow({
   onExecute?: () => void;
   onStdinChange?: (value: string) => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
+  language?: string;
 }) {
   const [displayedOutput, setDisplayedOutput] = useState("");
   const [showCursor, setShowCursor] = useState(true);
@@ -266,6 +268,7 @@ export default function TerminalModal({ isOpen, onClose, code, language }: Termi
           isExecuting={isExecuting}
           onStdinChange={setStdin}
           onKeyDown={handleKeyDown}
+          language={language}
         />
 
         {/* Execute Button */}

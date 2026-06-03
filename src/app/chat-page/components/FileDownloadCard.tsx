@@ -41,23 +41,51 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
     }
   };
 
-  const handleDownload = (e: React.MouseEvent) => {
+  const handleDownload = async (e: React.MouseEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // محاكاة عملية التحميل
-    setTimeout(() => {
+    try {
+      // محاولة تحميل الملف باستخدام fetch
+      const response = await fetch(convertToDirectDownload(downloadUrl));
+      
+      if (!response.ok) {
+        throw new Error('Failed to download file');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      
+      // إنشاء رابط تحميل مخفي
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      
+      // تنظيف
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
       setIsLoading(false);
       setIsComplete(true);
-      
-      // فتح الرابط بعد التحميل
-      window.open(convertToDirectDownload(downloadUrl), '_blank');
       
       // إعادة تعيين بعد 2 ثانية
       setTimeout(() => {
         setIsComplete(false);
       }, 2000);
-    }, 1500);
+    } catch (error) {
+      // إذا فشل fetch، استخدم window.open كـ fallback
+      console.error('Download failed, using fallback:', error);
+      setIsLoading(false);
+      setIsComplete(true);
+      
+      window.open(convertToDirectDownload(downloadUrl), '_blank');
+      
+      setTimeout(() => {
+        setIsComplete(false);
+      }, 2000);
+    }
   };
 
   const directDownloadUrl = convertToDirectDownload(downloadUrl);
