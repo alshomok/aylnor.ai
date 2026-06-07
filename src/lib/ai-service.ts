@@ -309,12 +309,15 @@ export async function generateAIResponseStream(
   messages: ChatMessage[],
   mode: BotMode,
   botPersonality?: string,
-  customSystemPrompt?: string
+  customSystemPrompt?: string,
+  retryCount: number = 0,
+  maxRetries: number = 4
 ) {
   const keyConfig = aiKeyRotationService.getNextAvailableKey(mode);
 
   console.log('=== AI Service Debug ===');
   console.log('Mode:', mode);
+  console.log('Retry count:', retryCount);
   console.log('Key config:', keyConfig);
   console.log('Key status:', aiKeyRotationService.getKeyStatus());
   console.log('Messages count:', messages.length);
@@ -327,6 +330,10 @@ export async function generateAIResponseStream(
     );
   }
 
+  if (retryCount >= maxRetries) {
+    throw new Error(`Maximum retry attempts (${maxRetries}) exceeded. All AI providers failed.`);
+  }
+
   try {
     // Prepare messages with system prompt - use custom prompt if provided, otherwise fallback to MODE_SYSTEM_PROMPTS
     const systemPrompt = customSystemPrompt
@@ -337,7 +344,14 @@ export async function generateAIResponseStream(
           ? `${MODE_SYSTEM_PROMPTS[mode]}\n\nAdditional personality: ${botPersonality}`
           : MODE_SYSTEM_PROMPTS[mode]);
 
-    const apiMessages = [{ role: 'system' as const, content: systemPrompt }, ...messages];
+    // Format messages for both Groq and Gemini compatibility
+    const apiMessages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+    ];
 
     console.log('API messages prepared:', apiMessages.length);
     console.log('System prompt length:', systemPrompt.length);
@@ -385,19 +399,36 @@ export async function generateAIResponseStream(
     // Report failure and rotate to next key
     aiKeyRotationService.reportKeyFailure(keyConfig.id, mode, error as Error);
 
+    const errorMessage = (error as Error).message;
+    const errorName = (error as Error).name;
+
     console.error('AI API Error:', error);
+    console.error('Error details:', {
+      message: errorMessage,
+      stack: (error as Error).stack,
+      name: errorName
+    });
+
+    // Check for rate limit errors specifically
+    const isRateLimitError = errorMessage.toLowerCase().includes('rate limit') ||
+                            errorMessage.toLowerCase().includes('429') ||
+                            errorMessage.toLowerCase().includes('quota');
+
+    if (isRateLimitError) {
+      console.warn(`Rate limit detected for ${keyConfig.provider} (${keyConfig.id}). Moving to next provider.`);
+    }
 
     // Check if all keys failed
     const keyStatus = aiKeyRotationService.getKeyStatus();
-    const allKeysFailed = Object.values(keyStatus).every(k => !k.isActive || k.failureCount >= 3);
+    const allKeysFailed = Object.values(keyStatus).every(k => !k.isActive || k.failureCount >= 5);
 
     if (allKeysFailed) {
       throw new Error('جميع مفاتيح AI غير صالحة أو غير مكونة. يرجى إضافة مفاتيح AI فعلية في ملف .env');
     }
 
     // Retry with next available key
-    console.log(`Key ${keyConfig.id} failed, retrying with next available key...`);
-    return generateAIResponseStream(messages, mode, botPersonality, customSystemPrompt);
+    console.log(`Key ${keyConfig.id} failed, retrying with next available key... (Attempt ${retryCount + 1}/${maxRetries})`);
+    return generateAIResponseStream(messages, mode, botPersonality, customSystemPrompt, retryCount + 1, maxRetries);
   }
 }
 

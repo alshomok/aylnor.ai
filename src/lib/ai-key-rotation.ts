@@ -40,11 +40,10 @@ const MODE_TEMPERATURES: Record<BotMode, number> = {
 class AIKeyRotationService {
   private keys: Map<AIModel, AIKeyConfig> = new Map();
   private modeIndexes: Map<BotMode, number> = new Map();
-  private maxFailures: number = 3;
-  private cooldownPeriod: number = 5 * 60 * 1000; // 5 minutes
+  private maxFailures: number = 5;
+  private cooldownPeriod: number = 2 * 60 * 1000; // 2 minutes
 
   constructor() {
-    this.initializeKeys();
     this.initializeModeIndexes();
   }
 
@@ -67,6 +66,12 @@ class AIKeyRotationService {
     });
   }
 
+  private ensureKeysInitialized(): void {
+    if (this.keys.size === 0) {
+      this.initializeKeys();
+    }
+  }
+
   private initializeModeIndexes(): void {
     this.modeIndexes.set('quick', 0);
     this.modeIndexes.set('thoughtful', 0);
@@ -74,6 +79,7 @@ class AIKeyRotationService {
   }
 
   public getNextAvailableKey(mode: BotMode): AIKeyConfig | null {
+    this.ensureKeysInitialized();
     const rotationSequence = MODE_ROTATION_PRIORITIES[mode];
     const currentIndex = this.modeIndexes.get(mode) || 0;
     const maxAttempts = rotationSequence.length;

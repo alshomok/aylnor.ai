@@ -152,18 +152,10 @@ export default function ChatSidebar({
 
   return (
     <>
-      {/* Mobile drawer overlay */}
-      {mobileOpen && (
-        <div
-          className="md:hidden fixed inset-0 bg-black/50 z-40"
-          onClick={onMobileClose}
-        />
-      )}
-
       {/* Sidebar */}
       <aside
-        className={`sidebar-transition flex flex-col border-l border-border bg-card shrink-0 relative z-10 ${
-          mobileOpen ? 'md:hidden fixed inset-y-0 right-0 w-72' : ''
+        className={`sidebar-transition flex flex-col border-l border-border bg-card shrink-0 relative pointer-events-auto ${
+          mobileOpen ? 'md:hidden fixed inset-y-0 right-0 w-72 z-50' : 'z-10'
         }`}
         style={{ width: open ? '260px' : '64px', minHeight: '100vh' }}
       >
