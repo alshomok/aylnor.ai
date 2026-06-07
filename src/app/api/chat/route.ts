@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import fs from 'fs';
 import path from 'path';
 
-// Initialize AI providers
+// Initialize AI providers (Groq and Gemini only - Ollama removed)
 const google = createGoogleGenerativeAI();
 const groq = createGroq();
 
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       systemPrompt += `\n\nAdditional personality: ${botPersonality}`;
     }
 
-    // Prepare messages
+    // Prepare messages (OpenAI structure for both Groq and Gemini)
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: message }
@@ -63,10 +63,11 @@ export async function POST(request: NextRequest) {
     console.log('User message length:', message.length);
     console.log('Total messages:', messages.length);
 
-    // Generate AI response with retry logic
+    // Generate AI response with failover between Groq and Gemini
     let stream: any;
     let retryCount = 0;
     const maxRetries = 4;
+    let lastError: Error | null = null;
 
     while (retryCount < maxRetries) {
       try {
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
         console.log(`=== Attempt ${retryCount + 1}/${maxRetries} ===`);
         console.log(`Using key: ${keyConfig.id} (${keyConfig.provider} - ${keyConfig.model})`);
 
-        // Select AI provider
+        // Select AI provider (Groq or Gemini only)
         let model;
         if (keyConfig.provider === 'gemini') {
           model = google(keyConfig.model);
@@ -119,9 +120,17 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         const keyConfig = aiKeyRotationService.getNextAvailableKey(mode as BotMode);
         if (keyConfig) {
+          // Provider-specific error logging
+          if (keyConfig.provider === 'groq') {
+            console.error('Groq Failed:', error);
+          } else if (keyConfig.provider === 'gemini') {
+            console.error('Gemini Failed:', error);
+          }
+          
           aiKeyRotationService.reportKeyFailure(keyConfig.id, mode as BotMode, error as Error);
         }
 
+        lastError = error as Error;
         const errorMessage = (error as Error).message;
         const isRateLimitError = errorMessage.toLowerCase().includes('rate limit') ||
                                 errorMessage.toLowerCase().includes('429') ||
@@ -129,13 +138,14 @@ export async function POST(request: NextRequest) {
 
         console.error(`Attempt ${retryCount + 1} failed:`, errorMessage);
         if (isRateLimitError) {
-          console.warn('Rate limit detected, rotating to next key');
+          console.warn('Rate limit detected, rotating to next provider');
         }
 
         retryCount++;
 
         if (retryCount >= maxRetries) {
-          throw new Error(`Maximum retry attempts (${maxRetries}) exceeded. All AI providers failed.`);
+          console.error('All production models failed. Last error:', lastError);
+          throw new Error(`All production models (Groq and Gemini) failed. Last error: ${lastError?.message}`);
         }
 
         // Wait before retrying
@@ -228,8 +238,9 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json(
       { 
-        error: errorMessage,
-        details: errorStack,
+        error: 'All production models failed',
+        details: errorMessage,
+        stack: errorStack,
         timestamp: new Date().toISOString()
       },
       { status: 500 }

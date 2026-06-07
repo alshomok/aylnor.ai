@@ -1,4 +1,4 @@
-type AIProvider = 'gemini' | 'groq' | 'ollama';
+type AIProvider = 'gemini' | 'groq';
 type AIModel = 'model-1' | 'model-2' | 'model-3' | 'model-4';
 type BotMode = 'quick' | 'thoughtful' | 'programming';
 
@@ -28,9 +28,9 @@ const MODEL_CONFIGS: Record<AIModel, { provider: AIProvider; model: string; envK
 };
 
 const MODE_ROTATION_PRIORITIES: Record<BotMode, AIModel[]> = {
-  quick: ['model-3', 'model-4', 'model-1', 'model-2'],
-  thoughtful: ['model-3', 'model-4', 'model-1', 'model-2'],
-  programming: ['model-1', 'model-2', 'model-3', 'model-4'],
+  quick: ['model-3', 'model-4', 'model-1', 'model-2'], // Groq first, then Gemini
+  thoughtful: ['model-3', 'model-4', 'model-1', 'model-2'], // Groq first, then Gemini
+  programming: ['model-3', 'model-4', 'model-1', 'model-2'], // Groq first, then Gemini
 };
 
 const MODE_TOKEN_LIMITS: Record<BotMode, number | null> = {
