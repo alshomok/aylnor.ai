@@ -48,18 +48,11 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
     // Convert Google Drive link to direct download link
     const downloadLink = convertToDirectDownload(downloadUrl);
 
-    // Create a hidden iframe to trigger download in background
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = downloadLink;
-    document.body.appendChild(iframe);
+    // Force current window to request download link
+    // Google Drive triggers file attachment download response, browser stays on page
+    window.location.href = downloadLink;
 
-    // Clean up the iframe after the download triggers
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-    }, 2000);
-
-    // Set loading states to false immediately
+    // Reset UI states immediately
     setIsLoading(false);
     setIsComplete(true);
 
