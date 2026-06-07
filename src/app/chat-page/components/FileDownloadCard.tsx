@@ -41,29 +41,46 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
     }
   };
 
-  const handleDownload = (e: React.MouseEvent) => {
+  const handleDownload = async (e: React.MouseEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // استخدام iframe مخفي للتحميل دون فتح صفحة جديدة
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.style.position = 'absolute';
-    iframe.style.left = '-9999px';
-    iframe.src = convertToDirectDownload(downloadUrl);
-    document.body.appendChild(iframe);
-    
-    // محاكاة عملية التحميل
-    setTimeout(() => {
+
+    try {
+      const directUrl = convertToDirectDownload(downloadUrl);
+
+      // Fetch the file as a blob
+      const response = await fetch(directUrl);
+      if (!response.ok) {
+        throw new Error('Failed to fetch file');
+      }
+
+      const blob = await response.blob();
+
+      // Create object URL and trigger download
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName || 'download';
+      document.body.appendChild(a);
+      a.click();
+
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
       setIsLoading(false);
       setIsComplete(true);
-      
-      // تنظيف iframe بعد التحميل
+
+      // Reset completion state after 2 seconds
       setTimeout(() => {
-        document.body.removeChild(iframe);
         setIsComplete(false);
       }, 2000);
-    }, 1500);
+    } catch (error) {
+      console.error('Download failed:', error);
+      setIsLoading(false);
+      // Show error to user instead of opening new tab
+      alert('فشل التحميل. يرجى المحاولة مرة أخرى.');
+    }
   };
 
   const directDownloadUrl = convertToDirectDownload(downloadUrl);
