@@ -251,37 +251,35 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       className={`${themeClass} flex h-[100dvh] w-full overflow-hidden bg-background text-foreground`}
       dir="rtl"
     >
-      {/* Mobile Sidebar Overlay */}
+      {/* Mobile Sidebar */}
+      <div className={`fixed inset-y-0 right-0 z-50 w-[85%] max-w-[320px] bg-[#0b121f] md:hidden transition-transform duration-300 ease-in-out ${mobileSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <ChatSidebar
+          open={mobileSidebarOpen}
+          onToggle={() => setMobileSidebarOpen(false)}
+          conversations={conversations}
+          setConversations={setConversations}
+          activeConvId={activeConvId}
+          setActiveConvId={setActiveConvId}
+          theme={theme}
+          onThemeToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          botName={botName}
+          onBotNameChange={setBotName}
+          botPersonality={botPersonality}
+          onBotPersonalityChange={setBotPersonality}
+          username={username}
+          onUsernameChange={setUsername}
+          onNewChat={createNewConversation}
+          mobileOpen={mobileSidebarOpen}
+          onMobileClose={() => setMobileSidebarOpen(false)}
+        />
+      </div>
+
+      {/* Mobile Sidebar Backdrop */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 md:hidden pointer-events-auto"
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setMobileSidebarOpen(false)}
         />
-      )}
-
-      {/* Mobile Sidebar Drawer */}
-      {mobileSidebarOpen && (
-        <div className={`fixed inset-y-0 right-0 z-50 w-[80%] max-w-[300px] bg-[#0b121f] md:hidden transition-transform duration-300 ease-in-out pointer-events-auto ${mobileSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-          <ChatSidebar
-            open={true}
-            onToggle={() => setMobileSidebarOpen(false)}
-            conversations={conversations}
-            setConversations={setConversations}
-            activeConvId={activeConvId}
-            setActiveConvId={setActiveConvId}
-            theme={theme}
-            onThemeToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            botName={botName}
-            onBotNameChange={setBotName}
-            botPersonality={botPersonality}
-            onBotPersonalityChange={setBotPersonality}
-            username={username}
-            onUsernameChange={setUsername}
-            onNewChat={createNewConversation}
-            mobileOpen={true}
-            onMobileClose={() => setMobileSidebarOpen(false)}
-          />
-        </div>
       )}
 
       {/* Desktop Sidebar */}
