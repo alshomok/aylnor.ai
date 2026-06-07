@@ -1,12 +1,20 @@
-export type AIProvider = 'gemini' | 'groq';
-export type AIModel = 'model-1' | 'model-2' | 'model-3' | 'model-4';
-export type BotMode = 'quick' | 'thoughtful' | 'programming';
+type AIProvider = 'gemini' | 'groq' | 'ollama';
+type AIModel = 'model-1' | 'model-2' | 'model-3' | 'model-4';
+type BotMode = 'quick' | 'thoughtful' | 'programming';
 
-export interface AIKeyConfig {
+interface AIKeyConfig {
   id: AIModel;
   provider: AIProvider;
   apiKey: string;
   model: string;
+  isActive: boolean;
+  failureCount: number;
+  lastFailureTime?: Date;
+}
+
+interface AIKeyStatus {
+  id: AIModel;
+  provider: AIProvider;
   isActive: boolean;
   failureCount: number;
   lastFailureTime?: Date;
@@ -96,24 +104,29 @@ class AIKeyRotationService {
       if (key.lastFailureTime) {
         const timeSinceFailure = Date.now() - key.lastFailureTime.getTime();
         if (timeSinceFailure < this.cooldownPeriod) {
+          console.log(`Key ${keyId} is in cooldown (${Math.round(timeSinceFailure / 1000)}s / ${this.cooldownPeriod / 1000}s)`);
           continue;
         }
       }
 
       // Check if key has exceeded max failures
       if (key.failureCount >= this.maxFailures) {
+        console.log(`Key ${keyId} has exceeded max failures (${key.failureCount}/${this.maxFailures})`);
         continue;
       }
 
       // Check if API key is configured
       if (!key.apiKey) {
+        console.log(`Key ${keyId} has no API key configured`);
         continue;
       }
 
+      console.log(`Selected key: ${keyId} (${key.provider} - ${key.model})`);
       return key;
     }
 
     // All keys are unavailable
+    console.error('All keys are unavailable for mode:', mode);
     return null;
   }
 
@@ -123,6 +136,16 @@ class AIKeyRotationService {
 
     key.failureCount += 1;
     key.lastFailureTime = new Date();
+
+    const errorMessage = error?.message || 'Unknown error';
+    const isRateLimitError = errorMessage.toLowerCase().includes('rate limit') ||
+                            errorMessage.toLowerCase().includes('429') ||
+                            errorMessage.toLowerCase().includes('quota');
+
+    console.error(`Key ${keyId} failed (attempt ${key.failureCount}/${this.maxFailures}):`, errorMessage);
+    if (isRateLimitError) {
+      console.warn(`Rate limit detected for ${key.provider} (${keyId})`);
+    }
 
     // If max failures reached, mark as inactive temporarily
     if (key.failureCount >= this.maxFailures) {
@@ -141,12 +164,14 @@ class AIKeyRotationService {
     key.failureCount = 0;
     key.lastFailureTime = undefined;
     key.isActive = true;
+    console.log(`Key ${keyId} succeeded, reset failure count`);
   }
 
   private rotateToNextKey(mode: BotMode): void {
     const currentIndex = this.modeIndexes.get(mode) || 0;
     const rotationSequence = MODE_ROTATION_PRIORITIES[mode];
     this.modeIndexes.set(mode, (currentIndex + 1) % rotationSequence.length);
+    console.log(`Rotated to next key for ${mode}: index ${(currentIndex + 1) % rotationSequence.length}`);
   }
 
   public resetKey(keyId: AIModel): void {
@@ -156,40 +181,34 @@ class AIKeyRotationService {
     key.failureCount = 0;
     key.lastFailureTime = undefined;
     key.isActive = true;
+    console.log(`Key ${keyId} has been reset`);
   }
 
-  public getKeyStatus(): Record<
-    AIModel,
-    { isActive: boolean; failureCount: number; provider: AIProvider }
-  > {
-    const status: Record<
-      AIModel,
-      { isActive: boolean; failureCount: number; provider: AIProvider }
-    > = {} as any;
-
-    this.keys.forEach((key, keyId) => {
-      status[keyId] = {
+  public getKeyStatus(): Record<AIModel, AIKeyStatus> {
+    const status: Record<AIModel, AIKeyStatus> = {} as Record<AIModel, AIKeyStatus>;
+    this.keys.forEach((key, id) => {
+      status[id] = {
+        id: key.id,
+        provider: key.provider,
         isActive: key.isActive,
         failureCount: key.failureCount,
-        provider: key.provider,
+        lastFailureTime: key.lastFailureTime,
       };
     });
-
     return status;
-  }
-
-  public getCurrentKeyIndex(mode: BotMode): number {
-    return this.modeIndexes.get(mode) || 0;
-  }
-
-  public getTokenLimit(mode: BotMode): number | null {
-    return MODE_TOKEN_LIMITS[mode];
   }
 
   public getTemperature(mode: BotMode): number {
     return MODE_TEMPERATURES[mode];
   }
+
+  public getTokenLimit(mode: BotMode): number | null {
+    return MODE_TOKEN_LIMITS[mode];
+  }
 }
 
 // Singleton instance
-export const aiKeyRotationService = new AIKeyRotationService();
+const aiKeyRotationService = new AIKeyRotationService();
+
+export { aiKeyRotationService, MODEL_CONFIGS, MODE_ROTATION_PRIORITIES };
+export type { AIKeyConfig, AIKeyStatus, AIModel, AIProvider, BotMode };
