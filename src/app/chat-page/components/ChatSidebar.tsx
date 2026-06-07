@@ -207,9 +207,12 @@ export default function ChatSidebar({
       {/* New chat button */}
       <div className="px-3 py-3">
         <button
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             onNewChat();
-            onMobileClose?.();
+            if (mobileOpen) {
+              onMobileClose?.();
+            }
           }}
           className={`btn-primary flex items-center gap-2 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-95 ${
             open ? 'w-full px-4 py-2.5' : 'w-10 h-10 justify-center mx-auto'
@@ -263,10 +266,13 @@ export default function ChatSidebar({
             {filteredConvs.map((conv) => (
               <button
                 key={conv.id}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setActiveConvId(conv.id);
                   router.push(`/chat-page?id=${conv.id}`);
-                  onMobileClose?.();
+                  if (mobileOpen) {
+                    onMobileClose?.();
+                  }
                 }}
                 className={`w-full text-right rounded-xl sidebar-item-hover transition-all ${
                   conv.id === activeConvId ? 'sidebar-item-active' : ''
@@ -311,7 +317,10 @@ export default function ChatSidebar({
             {/* Settings dropdown button */}
             <div className="relative" ref={settingsDropdownRef}>
               <button
-                onClick={() => setSettingsDropdownOpen(!settingsDropdownOpen)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSettingsDropdownOpen(!settingsDropdownOpen);
+                }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-item-hover flex-row-reverse"
               >
                 <Settings size={16} />
@@ -472,7 +481,8 @@ export default function ChatSidebar({
                                 }}
                               />
                               <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   onUsernameChange(tempUsername);
                                   setEditingUsername(false);
                                 }}
@@ -485,7 +495,8 @@ export default function ChatSidebar({
                             <div className="flex items-center justify-between flex-row-reverse">
                               <p className="text-xs font-semibold text-foreground truncate">{username}</p>
                               <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setTempUsername(username);
                                   setEditingUsername(true);
                                 }}

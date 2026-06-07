@@ -393,9 +393,12 @@ export default function ChatMain({
       lastIndex = match.index + match.length;
     }
 
-    // Add remaining text
+    // Add remaining text - but remove any markdown link syntax that might remain
     if (lastIndex < content.length) {
-      parts.push(content.substring(lastIndex));
+      const remainingText = content.substring(lastIndex);
+      // Remove any markdown link syntax that might be left
+      const cleanedText = remainingText.replace(/\[([^\]]+)\]\([^)]+\)/g, '');
+      parts.push(cleanedText);
     }
 
     // Process bold text in string parts

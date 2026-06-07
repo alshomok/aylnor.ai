@@ -84,6 +84,14 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
   }, [user?.id]);
 
+  // Fallback to set isLoading to false after a timeout
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setIsLoading(false);
+    }, 3000); // 3 seconds timeout
+    return () => clearTimeout(timeout);
+  }, []);
+
   // Load messages when activeConvId changes
   useEffect(() => {
     if (activeConvId) {
