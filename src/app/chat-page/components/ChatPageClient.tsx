@@ -164,6 +164,14 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
   }, [onAuthStateChange]);
 
+  // Fallback: Ensure loading state is reset after a timeout to prevent permanent freeze
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setIsLoading(false);
+    }, 5000); // 5 seconds timeout
+    return () => clearTimeout(timeout);
+  }, []);
+
   const createNewConversation = async (): Promise<string | null> => {
     if (!user?.id) {
       console.warn('No user ID available');

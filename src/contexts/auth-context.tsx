@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           data: {
             full_name: fullName,
           },
-          emailRedirectTo: `${window.location.origin}/sign-up-login-screen`,
+          emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/sign-up-login-screen` : '/sign-up-login-screen',
         },
       });
 
@@ -153,19 +153,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     if (supabase) {
       // Clear all localStorage items related to the current user's conversations
-      if (user?.id) {
+      if (typeof window !== 'undefined' && user?.id) {
         localStorage.removeItem(`lastConvId_${user.id}`);
       }
       
       // Clear all conversation-related localStorage items to prevent data leaks
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('lastConvId_')) {
-          keysToRemove.push(key);
+      if (typeof window !== 'undefined') {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('lastConvId_')) {
+            keysToRemove.push(key);
+          }
         }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
       }
-      keysToRemove.forEach(key => localStorage.removeItem(key));
       
       await supabase.auth.signOut();
     }

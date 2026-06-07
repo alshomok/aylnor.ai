@@ -22,17 +22,22 @@ function ChatContent() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      if (!loading && !user) {
-        // Check if user is remembered by IP
-        const hasIpLogin = await checkIpLogin();
-        if (hasIpLogin) {
-          // Redirect to login with email pre-filled
-          router.push('/sign-up-login-screen?remembered=true');
-        } else {
-          router.push('/sign-up-login-screen');
+      try {
+        if (!loading && !user) {
+          // Check if user is remembered by IP
+          const hasIpLogin = await checkIpLogin();
+          if (hasIpLogin) {
+            // Redirect to login with email pre-filled
+            router.push('/sign-up-login-screen?remembered=true');
+          } else {
+            router.push('/sign-up-login-screen');
+          }
         }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+      } finally {
+        setIpChecked(true);
       }
-      setIpChecked(true);
     };
 
     checkAuth();
