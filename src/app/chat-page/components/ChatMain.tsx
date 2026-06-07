@@ -327,10 +327,11 @@ export default function ChatMain({
       });
     } catch (error) {
       console.error('Error sending message:', error);
+      const errorDetails = error instanceof Error ? error.message : String(error);
       const errorMsg: Message = {
         id: `msg-${Date.now()}-bot`,
         role: 'bot',
-        content: 'عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.',
+        content: `عذراً، حدث خطأ أثناء معالجة طلبك: ${errorDetails}`,
         mode: activeMode,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
       };

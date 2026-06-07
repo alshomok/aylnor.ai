@@ -222,9 +222,16 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Chat API Error:', error);
+    console.error('All providers failed. Actual Error:', error);
+    const errorMessage = (error as Error).message || 'Internal server error';
+    const errorStack = (error as Error).stack || '';
+    
     return NextResponse.json(
-      { error: (error as Error).message || 'Internal server error' },
+      { 
+        error: errorMessage,
+        details: errorStack,
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     );
   }
