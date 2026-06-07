@@ -41,49 +41,31 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
     }
   };
 
-  const handleDownload = async (e: React.MouseEvent) => {
+  const handleDownload = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    try {
-      const directUrl = convertToDirectDownload(downloadUrl);
+    // Convert Google Drive link to direct download link
+    const downloadLink = convertToDirectDownload(downloadUrl);
 
-      // Fetch the file as a blob
-      const response = await fetch(directUrl);
-      if (!response.ok) {
-        throw new Error('Failed to fetch file');
-      }
+    // Force native browser download using anchor tag
+    const a = document.createElement('a');
+    a.href = downloadLink;
+    a.setAttribute('download', '');
+    a.setAttribute('target', '_blank');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 
-      const blob = await response.blob();
+    // Set loading states to false immediately
+    setIsLoading(false);
+    setIsComplete(true);
 
-      // Create object URL and trigger download
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName || 'download';
-      document.body.appendChild(a);
-      a.click();
-
-      // Clean up
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      setIsLoading(false);
-      setIsComplete(true);
-
-      // Reset completion state after 2 seconds
-      setTimeout(() => {
-        setIsComplete(false);
-      }, 2000);
-    } catch (error) {
-      console.error('Download failed:', error);
-      setIsLoading(false);
-      // Show error to user instead of opening new tab
-      alert('فشل التحميل. يرجى المحاولة مرة أخرى.');
-    }
+    // Reset completion state after 2 seconds
+    setTimeout(() => {
+      setIsComplete(false);
+    }, 2000);
   };
-
-  const directDownloadUrl = convertToDirectDownload(downloadUrl);
 
   return (
     <div className="my-3 w-full max-w-sm">
