@@ -426,9 +426,10 @@ export default function ChatMain({
             {/* Mobile menu button */}
             <button
               onClick={onToggleMobileSidebar}
-              className="md:hidden text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-white/5"
+              className="md:hidden text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-white/5 pointer-events-auto touch-manipulation"
+              aria-label="Toggle mobile sidebar"
             >
-              <Menu size={18} />
+              <Menu size={20} />
             </button>
             <button
               onClick={() => setShowCodePanel(!showCodePanel)}

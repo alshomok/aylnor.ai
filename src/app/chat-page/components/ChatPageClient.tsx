@@ -254,14 +254,14 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       {/* Mobile Sidebar Overlay */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/40 z-[999] md:hidden pointer-events-auto"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
 
       {/* Mobile Sidebar Drawer */}
       {mobileSidebarOpen && (
-        <div className="fixed inset-y-0 right-0 z-50 w-[80%] max-w-[300px] bg-[#0b121f] md:hidden">
+        <div className={`fixed inset-y-0 right-0 z-[1000] w-[80%] max-w-[300px] bg-[#0b121f] md:hidden transition-transform duration-300 ease-in-out ${mobileSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
           <ChatSidebar
             open={true}
             onToggle={() => setMobileSidebarOpen(false)}
