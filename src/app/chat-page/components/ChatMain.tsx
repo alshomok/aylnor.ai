@@ -269,8 +269,6 @@ export default function ChatMain({
         const chunk = decoder.decode(value, { stream: true });
         fullContent += chunk;
 
-        console.log('Received chunk:', chunk.length, 'chars');
-
         // Remove __METADATA__ from display content
         const metaIdx = fullContent.indexOf(METADATA_MARKER);
         const displayContent = metaIdx !== -1
@@ -286,15 +284,6 @@ export default function ChatMain({
             msg.id === botMsg.id ? { ...msg, content: displayContent } : msg
           );
         });
-      }
-
-      console.log('Stream ended. Full content length:', fullContent.length);
-      console.log('Full content preview:', fullContent.substring(0, 200));
-
-      // Fallback: if content is empty, log the raw response
-      if (fullContent.length === 0) {
-        console.error('ERROR: Empty response received from AI');
-        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
       }
 
       // Final cleanup after stream ends
@@ -327,11 +316,10 @@ export default function ChatMain({
       });
     } catch (error) {
       console.error('Error sending message:', error);
-      const errorDetails = error instanceof Error ? error.message : String(error);
       const errorMsg: Message = {
         id: `msg-${Date.now()}-bot`,
         role: 'bot',
-        content: `عذراً، حدث خطأ أثناء معالجة طلبك: ${errorDetails}`,
+        content: 'عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.',
         mode: activeMode,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
       };
@@ -405,12 +393,9 @@ export default function ChatMain({
       lastIndex = match.index + match.length;
     }
 
-    // Add remaining text - but remove any markdown link syntax that might remain
+    // Add remaining text
     if (lastIndex < content.length) {
-      const remainingText = content.substring(lastIndex);
-      // Remove any markdown link syntax that might be left
-      const cleanedText = remainingText.replace(/\[([^\]]+)\]\([^)]+\)/g, '');
-      parts.push(cleanedText);
+      parts.push(content.substring(lastIndex));
     }
 
     // Process bold text in string parts

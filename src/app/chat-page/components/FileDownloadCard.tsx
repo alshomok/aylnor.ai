@@ -71,13 +71,20 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
   return (
     <div className="my-3 w-full max-w-sm">
       {/* البطاقة الرئيسية */}
-      <div className="bg-[#0b1329] backdrop-blur-md border border-blue-600/30 rounded-2xl overflow-hidden hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-300">
+      <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden">
+        {/* الرأس بتدرج أزرق ملكي وذهبي */}
+        <div className="h-16 bg-gradient-to-r from-royal-blue to-gold relative overflow-hidden">
+          {/* عناصر ديكورية متحركة */}
+          <div className="absolute top-1 right-2 w-8 h-8 bg-gold/30 rounded-full animate-pulse"></div>
+          <div className="absolute bottom-1 left-2 w-6 h-6 bg-gold/20 rounded-full animate-pulse delay-75"></div>
+        </div>
+        
         {/* محتوى البطاقة */}
         <div className="p-4">
           {/* أيقونة الملف */}
           <div className="flex justify-center mb-3">
-            <div className="w-12 h-12 bg-blue-600/10 rounded-xl flex items-center justify-center border border-blue-600/20">
-              <FileText className="w-6 h-6 text-amber-400" strokeWidth={1.5} />
+            <div className="w-12 h-12 bg-gradient-to-br from-royal-blue/20 to-gold/20 rounded-xl flex items-center justify-center">
+              <FileText className="w-6 h-6 text-gold" strokeWidth={1.5} />
             </div>
           </div>
           
@@ -86,11 +93,11 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
             <h3 className="text-base font-bold text-zinc-100 mb-1 truncate">
               {fileName}
             </h3>
-            <div className="flex justify-center gap-2 text-xs">
-              <span className="bg-amber-400/10 border border-amber-400/30 px-2 py-0.5 rounded-full font-medium text-amber-400">
+            <div className="flex justify-center gap-2 text-xs text-zinc-400">
+              <span className="bg-white/5 px-2 py-0.5 rounded-full font-medium">
                 {getFileTypeLabel()}
               </span>
-              <span className="bg-white/5 px-2 py-0.5 rounded-full text-zinc-400">
+              <span className="bg-white/5 px-2 py-0.5 rounded-full">
                 {fileSize}
               </span>
             </div>
@@ -103,13 +110,13 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
                 <span className="text-xs font-semibold text-zinc-400">
                   جاري التحميل...
                 </span>
-                <span className="text-xs font-bold text-amber-400">
+                <span className="text-xs font-bold text-gold">
                   ٧٥%
                 </span>
               </div>
               <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-blue-600 to-amber-400 rounded-full animate-loading"
+                  className="h-full bg-gradient-to-r from-royal-blue to-gold rounded-full animate-loading"
                   style={{
                     width: '75%',
                   }}
@@ -135,7 +142,7 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
                 ? 'bg-white/5 text-zinc-400 cursor-wait'
                 : isComplete
                   ? 'bg-green-500 text-white'
-                  : 'bg-blue-600 hover:bg-blue-500 text-white hover:shadow-lg hover:shadow-blue-600/30 active:scale-95'
+                  : 'bg-gradient-to-r from-royal-blue to-gold text-white hover:shadow-lg hover:shadow-royal-blue/30 active:scale-95'
             }`}
           >
             {isLoading ? (
@@ -167,6 +174,10 @@ export const FileDownloadCard: React.FC<FileDownloadCardProps> = ({
         
         .animate-loading {
           animation: shimmer 1.5s infinite;
+        }
+        
+        .delay-75 {
+          animation-delay: 0.75s;
         }
       `}</style>
     </div>

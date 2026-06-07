@@ -13,6 +13,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Bot,
   Pencil,
   Check,
   X,
@@ -61,6 +62,14 @@ const MODE_LABELS: Record<BotMode, string> = {
   programming: 'مبرمج',
 };
 
+const SETTINGS_MENU_ITEMS = [
+  { id: 'appearance', icon: Palette, label: 'المظهر والثيم', description: 'تخصيص الألوان والوضع' },
+  { id: 'notifications', icon: Bell, label: 'الإشعارات', description: 'إدارة التنبيهات' },
+  { id: 'privacy', icon: Shield, label: 'الخصوصية والأمان', description: 'إعدادات الحساب' },
+  { id: 'help', icon: HelpCircle, label: 'المساعدة والدعم', description: 'الأسئلة الشائعة' },
+  { id: 'about', icon: Info, label: 'حول aylnor.ai', description: 'الإصدار والمعلومات' },
+];
+
 export default function ChatSidebar({
   open,
   onToggle,
@@ -83,6 +92,7 @@ export default function ChatSidebar({
   const { user, signOut } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [activeSection, setActiveSection] = useState<'chats'>('chats');
   const [editingBotName, setEditingBotName] = useState(false);
   const [tempBotName, setTempBotName] = useState(botName);
   const [editingUsername, setEditingUsername] = useState(false);
@@ -141,12 +151,22 @@ export default function ChatSidebar({
   }, []);
 
   return (
-    <aside
-      className={`flex flex-col border-l border-border bg-card shrink-0 relative pointer-events-auto ${
-        mobileOpen ? 'md:hidden fixed inset-y-0 right-0 w-72 z-50' : ''
-      }`}
-      style={{ width: open ? '260px' : '64px', minHeight: '100vh' }}
-    >
+    <>
+      {/* Mobile drawer overlay */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={onMobileClose}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`sidebar-transition flex flex-col border-l border-border bg-card shrink-0 relative z-10 ${
+          mobileOpen ? 'md:hidden fixed inset-y-0 right-0 w-72' : ''
+        }`}
+        style={{ width: open ? '260px' : '64px', minHeight: '100vh' }}
+      >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-4 border-b border-border">
         {open && (
@@ -187,12 +207,9 @@ export default function ChatSidebar({
       {/* New chat button */}
       <div className="px-3 py-3">
         <button
-          onClick={(e) => {
-            e.stopPropagation();
+          onClick={() => {
             onNewChat();
-            if (mobileOpen) {
-              onMobileClose?.();
-            }
+            onMobileClose?.();
           }}
           className={`btn-primary flex items-center gap-2 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-95 ${
             open ? 'w-full px-4 py-2.5' : 'w-10 h-10 justify-center mx-auto'
@@ -246,13 +263,10 @@ export default function ChatSidebar({
             {filteredConvs.map((conv) => (
               <button
                 key={conv.id}
-                onClick={(e) => {
-                  e.stopPropagation();
+                onClick={() => {
                   setActiveConvId(conv.id);
                   router.push(`/chat-page?id=${conv.id}`);
-                  if (mobileOpen) {
-                    onMobileClose?.();
-                  }
+                  onMobileClose?.();
                 }}
                 className={`w-full text-right rounded-xl sidebar-item-hover transition-all ${
                   conv.id === activeConvId ? 'sidebar-item-active' : ''
@@ -297,10 +311,7 @@ export default function ChatSidebar({
             {/* Settings dropdown button */}
             <div className="relative" ref={settingsDropdownRef}>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSettingsDropdownOpen(!settingsDropdownOpen);
-                }}
+                onClick={() => setSettingsDropdownOpen(!settingsDropdownOpen)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-item-hover flex-row-reverse"
               >
                 <Settings size={16} />
@@ -311,7 +322,7 @@ export default function ChatSidebar({
                 />
               </button>
 
-              {/* Dropdown menu */}
+              {/* Dropdown menu with Personality and Settings sections */}
               {settingsDropdownOpen && (
                 <div className="absolute bottom-full mb-1 left-0 right-0 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50 max-h-[400px] overflow-y-auto">
                   {/* Personality section */}
@@ -461,8 +472,7 @@ export default function ChatSidebar({
                                 }}
                               />
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                onClick={() => {
                                   onUsernameChange(tempUsername);
                                   setEditingUsername(false);
                                 }}
@@ -475,8 +485,7 @@ export default function ChatSidebar({
                             <div className="flex items-center justify-between flex-row-reverse">
                               <p className="text-xs font-semibold text-foreground truncate">{username}</p>
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                onClick={() => {
                                   setTempUsername(username);
                                   setEditingUsername(true);
                                 }}
@@ -571,5 +580,6 @@ export default function ChatSidebar({
         )}
       </div>
     </aside>
+    </>
   );
 }

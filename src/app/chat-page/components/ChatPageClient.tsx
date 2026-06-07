@@ -84,14 +84,6 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
     }
   }, [user?.id]);
 
-  // Fallback to set isLoading to false after a timeout
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setIsLoading(false);
-    }, 3000); // 3 seconds timeout
-    return () => clearTimeout(timeout);
-  }, []);
-
   // Load messages when activeConvId changes
   useEffect(() => {
     if (activeConvId) {
@@ -254,14 +246,14 @@ export default function ChatPageClient({ chatId }: ChatPageClientProps) {
       {/* Mobile Sidebar Overlay */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden pointer-events-auto"
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
 
       {/* Mobile Sidebar Drawer */}
       {mobileSidebarOpen && (
-        <div className="fixed inset-y-0 right-0 z-50 w-[80%] max-w-[300px] bg-[#0b121f] md:hidden pointer-events-auto">
+        <div className="fixed inset-y-0 right-0 z-50 w-[80%] max-w-[300px] bg-[#0b121f] md:hidden">
           <ChatSidebar
             open={true}
             onToggle={() => setMobileSidebarOpen(false)}
