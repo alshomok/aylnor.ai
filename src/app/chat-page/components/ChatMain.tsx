@@ -269,6 +269,8 @@ export default function ChatMain({
         const chunk = decoder.decode(value, { stream: true });
         fullContent += chunk;
 
+        console.log('Received chunk:', chunk.length, 'chars');
+
         // Remove __METADATA__ from display content
         const metaIdx = fullContent.indexOf(METADATA_MARKER);
         const displayContent = metaIdx !== -1
@@ -284,6 +286,15 @@ export default function ChatMain({
             msg.id === botMsg.id ? { ...msg, content: displayContent } : msg
           );
         });
+      }
+
+      console.log('Stream ended. Full content length:', fullContent.length);
+      console.log('Full content preview:', fullContent.substring(0, 200));
+
+      // Fallback: if content is empty, log the raw response
+      if (fullContent.length === 0) {
+        console.error('ERROR: Empty response received from AI');
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
       }
 
       // Final cleanup after stream ends

@@ -46,10 +46,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Build system prompt
-    const systemPrompt = skillPrompt || `You are a helpful AI assistant.`;
+    let systemPrompt = skillPrompt || `You are a helpful AI assistant.`;
     
     if (botPersonality) {
-      systemPrompt + `\n\nAdditional personality: ${botPersonality}`;
+      systemPrompt += `\n\nAdditional personality: ${botPersonality}`;
     }
 
     // Prepare messages
@@ -58,8 +58,13 @@ export async function POST(request: NextRequest) {
       { role: 'user', content: message }
     ];
 
+    console.log('=== Messages Prepared ===');
+    console.log('System prompt length:', systemPrompt.length);
+    console.log('User message length:', message.length);
+    console.log('Total messages:', messages.length);
+
     // Generate AI response with retry logic
-    let stream;
+    let stream: any;
     let retryCount = 0;
     const maxRetries = 4;
 
@@ -94,12 +99,17 @@ export async function POST(request: NextRequest) {
         console.log('Max tokens:', maxTokens);
 
         // Generate streaming response
+        console.log('Calling streamText with model:', keyConfig.model);
         stream = streamText({
           model,
           messages,
           temperature,
           ...(maxTokens && { maxGenerationTokens: maxTokens }),
         });
+
+        console.log('streamText returned successfully');
+        console.log('Stream object:', stream);
+        console.log('Stream has textStream:', 'textStream' in stream);
 
         // Report success
         aiKeyRotationService.reportKeySuccess(keyConfig.id);
@@ -139,10 +149,27 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           let fullContent = '';
+          let chunkCount = 0;
+          
+          console.log('=== Starting Stream ===');
           
           for await (const chunk of stream.textStream) {
+            chunkCount++;
             fullContent += chunk;
+            console.log(`Chunk ${chunkCount}:`, chunk.length, 'chars');
             controller.enqueue(encoder.encode(chunk));
+          }
+
+          console.log('=== Stream Ended ===');
+          console.log('Total chunks:', chunkCount);
+          console.log('Full content length:', fullContent.length);
+          console.log('Full content preview:', fullContent.substring(0, 200));
+
+          if (chunkCount === 0) {
+            console.error('ERROR: Stream produced zero chunks');
+            const errorMessage = 'عذراً، حدث خطأ في الاتصال بخدمة الذكاء الاصطناعي. لم يتم استلام أي رد.';
+            controller.enqueue(encoder.encode(errorMessage));
+            fullContent = errorMessage;
           }
 
           // Extract code block if present
