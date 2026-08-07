@@ -5,6 +5,13 @@ import { findBestMatch } from '@/lib/matching-algorithm';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+// Local-First AI Provider Interface
+interface AIProviderResponse {
+  content: string;
+  provider: string;
+  model: string;
+}
+
 // Strict TypeScript Discriminated Unions for Execution States
 type ExecutionState =
   | { status: 'idle' }
@@ -238,6 +245,200 @@ async function checkHourlyRequestLimit(userId: string, mode: BotMode): Promise<{
   }
 
   return { allowed: true };
+}
+
+// ============================================
+// Local-First AI Provider Functions
+// ============================================
+
+async function callLocalOllama(messages: ChatMessage[]): Promise<AIProviderResponse> {
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const endpoint = `${ollamaBaseUrl}/api/chat`;
+  const model = 'qwen2.5-coder';
+
+  console.log('=== Attempting Local Ollama ===');
+  console.log('Endpoint:', endpoint);
+  console.log('Model:', model);
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6 second timeout
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages.map(msg => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Ollama returned status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.message?.content || data.response || '';
+
+    if (!content) {
+      throw new Error('No content in Ollama response');
+    }
+
+    console.log('=== Local Ollama Success ===');
+    return {
+      content,
+      provider: 'Local Server (Ollama)',
+      model,
+    };
+  } catch (error) {
+    console.error('=== Local Ollama Failed ===');
+    console.error('Error:', error instanceof Error ? error.message : error);
+    throw error; // Re-throw to trigger failover
+  }
+}
+
+async function callGroqFailover(messages: ChatMessage[]): Promise<AIProviderResponse> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error('GROQ_API_KEY not configured');
+  }
+
+  const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+  const model = 'llama-3.3-70b-versatile';
+
+  console.log('=== Attempting Groq Failover ===');
+  console.log('Model:', model);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages.map(msg => ({
+          role: msg.role === 'assistant' ? 'assistant' : 'user',
+          content: msg.content,
+        })),
+        temperature: 0.7,
+        max_tokens: 4096,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Groq returned status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+
+    if (!content) {
+      throw new Error('No content in Groq response');
+    }
+
+    console.log('=== Groq Failover Success ===');
+    return {
+      content,
+      provider: 'Cloud Failover (Groq)',
+      model,
+    };
+  } catch (error) {
+    console.error('=== Groq Failover Failed ===');
+    console.error('Error:', error instanceof Error ? error.message : error);
+    throw error; // Re-throw to trigger next failover
+  }
+}
+
+async function callGeminiFailover(messages: ChatMessage[]): Promise<AIProviderResponse> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY not configured');
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const model = 'gemini-1.5-flash';
+
+  console.log('=== Attempting Gemini Failover ===');
+  console.log('Model:', model);
+
+  try {
+    // Convert messages to Gemini format
+    const geminiMessages = messages.map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }],
+    }));
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: geminiMessages,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 4096,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini returned status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    if (!content) {
+      throw new Error('No content in Gemini response');
+    }
+
+    console.log('=== Gemini Failover Success ===');
+    return {
+      content,
+      provider: 'Cloud Failover (Gemini)',
+      model,
+    };
+  } catch (error) {
+    console.error('=== Gemini Failover Failed ===');
+    console.error('Error:', error instanceof Error ? error.message : error);
+    throw error;
+  }
+}
+
+async function getAIResponseWithFailover(messages: ChatMessage[]): Promise<AIProviderResponse> {
+  // Try Local Ollama first (Primary)
+  try {
+    return await callLocalOllama(messages);
+  } catch (localError) {
+    console.warn('Local Ollama unavailable, trying Groq failover...');
+
+    // Try Groq (Tier 1 Fallback)
+    try {
+      return await callGroqFailover(messages);
+    } catch (groqError) {
+      console.warn('Groq failover unavailable, trying Gemini failover...');
+
+      // Try Gemini (Tier 2 Fallback)
+      try {
+        return await callGeminiFailover(messages);
+      } catch (geminiError) {
+        console.error('All AI providers failed');
+        throw new Error('All AI providers are currently unavailable. Please try again later.');
+      }
+    }
+  }
 }
 
 async function performWebSearch(query: string): Promise<string> {
@@ -588,171 +789,125 @@ ${searchResults}
       }
     }
 
-    // Generate AI response with streaming using optimized chat history and dynamic skill prompt
-    console.log('=== Generating AI Response ===');
+    // Generate AI response with Local-First failover strategy
+    console.log('=== Generating AI Response with Local-First Failover ===');
     console.log('Optimized chat history length:', optimizedChatHistory.length);
     console.log('Final message length:', finalMessage.length);
     console.log('Mode:', mode);
     console.log('Bot personality:', botPersonality);
     console.log('Skill prompt loaded from file:', skillPrompt.substring(0, 100) + '...');
 
-    let stream;
+    // Prepare messages with system prompt
+    const systemPrompt = botPersonality
+      ? `${skillPrompt}\n\nAdditional personality: ${botPersonality}`
+      : skillPrompt;
+
+    const apiMessages = [{ role: 'system' as const, content: systemPrompt }, ...optimizedChatHistory];
+
+    let aiResponse: AIProviderResponse;
     try {
-      stream = await generateAIResponseStream(optimizedChatHistory, mode as BotMode, botPersonality, skillPrompt);
-      console.log('Stream generated successfully');
-      console.log('Stream object:', stream);
-      console.log('Stream has textStream:', 'textStream' in stream);
+      aiResponse = await getAIResponseWithFailover(apiMessages);
+      console.log('AI Response generated successfully');
+      console.log('Provider:', aiResponse.provider);
+      console.log('Model:', aiResponse.model);
+      console.log('Content length:', aiResponse.content.length);
     } catch (error) {
-      console.error('ERROR: Failed to generate AI stream:', error);
-      throw error;
+      console.error('ERROR: All AI providers failed:', error);
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'All AI providers are currently unavailable' },
+        { status: 503 }
+      );
     }
 
-    // Collect the full response for database storage
-    let fullContent = '';
+    // Process the AI response
+    const fullContent = aiResponse.content;
+    const provider = aiResponse.provider;
+    const model = aiResponse.model;
+
+    // Extract code block from full content
+    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    const matches = [...fullContent.matchAll(codeBlockRegex)];
     let codeBlock: { language: string; code: string } | undefined = undefined;
-    let provider = '';
-    let model = '';
-    let chunkCount = 0;
+    if (matches.length > 0) {
+      const lastMatch = matches[matches.length - 1];
+      codeBlock = {
+        language: lastMatch[1] || 'text',
+        code: lastMatch[2].trim(),
+      };
+    }
 
-    // Create a readable stream
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
+    // Format the response based on source
+    let formattedContent = fullContent;
+    if (source === 'file' && foundFile) {
+      formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${fullContent}`;
+    } else if (source === 'web') {
+      formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${fullContent}`;
+    }
 
-    const readableStream = new ReadableStream({
-      async start(controller) {
-        try {
-          console.log('=== Starting Stream ===');
-          
-          let hasChunks = false;
-          for await (const chunk of stream.textStream) {
-            hasChunks = true;
-            chunkCount++;
-            fullContent += chunk;
-            console.log(`Chunk ${chunkCount}:`, chunk.length, 'chars');
-            controller.enqueue(encoder.encode(chunk));
-          }
+    // Save bot response to Supabase (skip if local conversation)
+    if (!isLocalConversation) {
+      console.log('=== Saving Bot Message to Supabase ===');
+      console.log('Conversation ID:', conversationId);
+      console.log('Content length:', formattedContent.length);
+      console.log('Provider:', provider);
+      console.log('Model:', model);
+      
+      const { error: botMessageError } = await server.from('messages').insert({
+        conversation_id: conversationId,
+        role: 'bot',
+        content: formattedContent,
+        mode: mode as BotMode,
+        code_block: codeBlock,
+      });
 
-          if (!hasChunks) {
-            console.error('ERROR: Stream produced zero chunks');
-            const errorMessage = 'عذراً، حدث خطأ في الاتصال بخدمة الذكاء الاصطناعي. لم يتم استلام أي رد.';
-            controller.enqueue(encoder.encode(errorMessage));
-            fullContent = errorMessage;
-          }
+      if (botMessageError) {
+        console.error('=== Error Saving Bot Message ===');
+        console.error('Error:', botMessageError);
+        console.error('Message:', botMessageError.message);
+        console.error('Details:', botMessageError.details);
+        console.error('Hint:', botMessageError.hint);
+        console.error('Code:', botMessageError.code);
+      } else {
+        console.log('=== Bot Message Saved Successfully ===');
+      }
 
-          console.log('=== Stream Ended ===');
-          console.log('Total chunks:', chunkCount);
-          console.log('Full content length:', fullContent.length);
+      // Update conversation timestamp and last message
+      const { error: updateError } = await server
+        .from('conversations')
+        .update({
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', conversationId);
 
-          // Extract code block from full content
-          const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
-          const matches = [...fullContent.matchAll(codeBlockRegex)];
-          if (matches.length > 0) {
-            const lastMatch = matches[matches.length - 1];
-            codeBlock = {
-              language: lastMatch[1] || 'text',
-              code: lastMatch[2].trim(),
-            };
-          }
+      if (updateError) {
+        console.error('=== Error Updating Conversation ===');
+        console.error('Error:', updateError);
+      } else {
+        console.log('=== Conversation Updated Successfully ===');
+      }
+    }
 
-          // Remove __METADATA__ from content before saving to database
-          const METADATA_MARKER = '\n\n__METADATA__';
-          const metaIdx = fullContent.indexOf(METADATA_MARKER);
-          const cleanContent = metaIdx !== -1
-            ? fullContent.substring(0, metaIdx)
-            : fullContent;
-
-          // Format the response based on source
-          let formattedContent = cleanContent;
-          if (source === 'file' && foundFile) {
-            formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${cleanContent}`;
-          } else if (source === 'web') {
-            formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${cleanContent}`;
-          }
-
-          // Save bot response to Supabase (skip if local conversation)
-          if (!isLocalConversation) {
-            console.log('=== Saving Bot Message to Supabase ===');
-            console.log('Conversation ID:', conversationId);
-            console.log('Content length:', formattedContent.length);
-            
-            const { error: botMessageError } = await server.from('messages').insert({
-              conversation_id: conversationId,
-              role: 'bot',
-              content: formattedContent,
-              mode: mode as BotMode,
-              code_block: codeBlock,
-            });
-
-            if (botMessageError) {
-              console.error('=== Error Saving Bot Message ===');
-              console.error('Error:', botMessageError);
-              console.error('Message:', botMessageError.message);
-              console.error('Details:', botMessageError.details);
-              console.error('Hint:', botMessageError.hint);
-              console.error('Code:', botMessageError.code);
-            } else {
-              console.log('=== Bot Message Saved Successfully ===');
-            }
-
-            // Update conversation timestamp and last message
-            const { error: updateError } = await server
-              .from('conversations')
-              .update({
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', conversationId);
-
-            if (updateError) {
-              console.error('=== Error Updating Conversation ===');
-              console.error('Error:', updateError);
-            } else {
-              console.log('=== Conversation Updated Successfully ===');
-            }
-          }
-
-          // Send final metadata in a single chunk to prevent separation
-          controller.enqueue(
-            encoder.encode(
-              '\n\n__METADATA__' + JSON.stringify({
-                mode,
-                codeBlock,
-                fileCard: (isFileRequest && foundFile) ? {
-                  id: foundFile.id,
-                  filename: foundFile.filename,
-                  file_type: foundFile.file_type,
-                  file_url: foundFile.file_url,
-                  description: foundFile.description,
-                } : null,
-                source,
-              })
-            )
-          );
-
-          controller.close();
-        } catch (error) {
-          console.error('Streaming error:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          console.error('Error details:', errorMessage);
-          
-          // Stream error message to UI instead of failing silently
-          controller.enqueue(encoder.encode(`\n\nعذراً، حدث خطأ: ${errorMessage}`));
-          controller.close();
-        }
-      },
-    });
-
-    return new Response(readableStream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'Transfer-Encoding': 'chunked',
-      },
+    // Return response with metadata
+    return NextResponse.json({
+      content: formattedContent,
+      mode,
+      codeBlock,
+      fileCard: (isFileRequest && foundFile) ? {
+        id: foundFile.id,
+        filename: foundFile.filename,
+        file_type: foundFile.file_type,
+        file_url: foundFile.file_url,
+        description: foundFile.description,
+      } : null,
+      source,
+      provider,
+      model,
     });
   } catch (error) {
     console.error('Error in POST /api/chat:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to process chat request';
     return NextResponse.json(
-      { error: 'Failed to process chat request' },
+      { error: errorMessage },
       { status: 500 }
     );
   }
