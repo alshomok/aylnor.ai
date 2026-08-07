@@ -12,6 +12,29 @@ interface AIProviderResponse {
   model: string;
 }
 
+// Environment Variable Validation
+function validateEnvironmentVariables() {
+  const missing: string[] = [];
+  
+  if (!process.env.OLLAMA_BASE_URL) {
+    missing.push('OLLAMA_BASE_URL (will use default: http://localhost:11434)');
+  }
+  if (!process.env.GROQ_API_KEY) {
+    missing.push('GROQ_API_KEY (Tier 1 failover unavailable)');
+  }
+  if (!process.env.GEMINI_API_KEY) {
+    missing.push('GEMINI_API_KEY (Tier 2 failover unavailable)');
+  }
+  
+  if (missing.length > 0) {
+    console.warn('=== Missing or Optional Environment Variables ===');
+    missing.forEach(msg => console.warn(`  - ${msg}`));
+    console.warn('=== End of Environment Variables Warning ===');
+  } else {
+    console.log('=== All Environment Variables Configured ===');
+  }
+}
+
 // Strict TypeScript Discriminated Unions for Execution States
 type ExecutionState =
   | { status: 'idle' }
@@ -252,17 +275,31 @@ async function checkHourlyRequestLimit(userId: string, mode: BotMode): Promise<{
 // ============================================
 
 async function callLocalOllama(messages: ChatMessage[]): Promise<AIProviderResponse> {
-  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-  const endpoint = `${ollamaBaseUrl}/api/chat`;
+  // Sanitize OLLAMA_BASE_URL - remove trailing slashes
+  const baseUrl = process.env.OLLAMA_BASE_URL?.replace(/\/$/, '') || 'http://localhost:11434';
+  const endpoint = `${baseUrl}/api/chat`;
   const model = 'qwen2.5-coder';
 
   console.log('=== Attempting Local Ollama ===');
   console.log('Endpoint:', endpoint);
   console.log('Model:', model);
+  console.log('Messages count:', messages.length);
+
+  if (!process.env.OLLAMA_BASE_URL) {
+    console.warn('OLLAMA_BASE_URL not configured, using default: http://localhost:11434');
+  }
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 35000); // 35 second timeout for local inference
+
+    // Format messages for Ollama API
+    const formattedMessages = messages.map(msg => ({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: msg.content,
+    }));
+
+    console.log('Sending request to Ollama with timeout 35s');
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -271,10 +308,7 @@ async function callLocalOllama(messages: ChatMessage[]): Promise<AIProviderRespo
       },
       body: JSON.stringify({
         model: model,
-        messages: messages.map(msg => ({
-          role: msg.role,
-          content: msg.content,
-        })),
+        messages: formattedMessages,
         stream: false,
       }),
       signal: controller.signal,
@@ -282,18 +316,26 @@ async function callLocalOllama(messages: ChatMessage[]): Promise<AIProviderRespo
 
     clearTimeout(timeoutId);
 
+    console.log('Ollama response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Ollama returned status ${response.status}`);
+      const errorText = await response.text();
+      console.error('Ollama error response:', errorText);
+      throw new Error(`Ollama returned status ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('Ollama response data keys:', Object.keys(data));
+    
     const content = data.message?.content || data.response || '';
 
     if (!content) {
+      console.error('Ollama response structure:', JSON.stringify(data, null, 2));
       throw new Error('No content in Ollama response');
     }
 
     console.log('=== Local Ollama Success ===');
+    console.log('Content length:', content.length);
     return {
       content,
       provider: 'Local Server (Ollama)',
@@ -301,7 +343,15 @@ async function callLocalOllama(messages: ChatMessage[]): Promise<AIProviderRespo
     };
   } catch (error) {
     console.error('=== Local Ollama Failed ===');
-    console.error('Error:', error instanceof Error ? error.message : error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      if (error.name === 'AbortError') {
+        console.error('Request timed out after 35 seconds');
+      }
+    } else {
+      console.error('Unknown error:', error);
+    }
     throw error; // Re-throw to trigger failover
   }
 }
@@ -309,6 +359,7 @@ async function callLocalOllama(messages: ChatMessage[]): Promise<AIProviderRespo
 async function callGroqFailover(messages: ChatMessage[]): Promise<AIProviderResponse> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
+    console.error('GROQ_API_KEY not configured');
     throw new Error('GROQ_API_KEY not configured');
   }
 
@@ -317,6 +368,7 @@ async function callGroqFailover(messages: ChatMessage[]): Promise<AIProviderResp
 
   console.log('=== Attempting Groq Failover ===');
   console.log('Model:', model);
+  console.log('Messages count:', messages.length);
 
   try {
     const response = await fetch(endpoint, {
@@ -336,18 +388,26 @@ async function callGroqFailover(messages: ChatMessage[]): Promise<AIProviderResp
       }),
     });
 
+    console.log('Groq response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Groq returned status ${response.status}`);
+      const errorText = await response.text();
+      console.error('Groq error response:', errorText);
+      throw new Error(`Groq returned status ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('Groq response data keys:', Object.keys(data));
+    
     const content = data.choices?.[0]?.message?.content || '';
 
     if (!content) {
+      console.error('Groq response structure:', JSON.stringify(data, null, 2));
       throw new Error('No content in Groq response');
     }
 
     console.log('=== Groq Failover Success ===');
+    console.log('Content length:', content.length);
     return {
       content,
       provider: 'Cloud Failover (Groq)',
@@ -355,7 +415,12 @@ async function callGroqFailover(messages: ChatMessage[]): Promise<AIProviderResp
     };
   } catch (error) {
     console.error('=== Groq Failover Failed ===');
-    console.error('Error:', error instanceof Error ? error.message : error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+    } else {
+      console.error('Unknown error:', error);
+    }
     throw error; // Re-throw to trigger next failover
   }
 }
@@ -363,6 +428,7 @@ async function callGroqFailover(messages: ChatMessage[]): Promise<AIProviderResp
 async function callGeminiFailover(messages: ChatMessage[]): Promise<AIProviderResponse> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
+    console.error('GEMINI_API_KEY not configured');
     throw new Error('GEMINI_API_KEY not configured');
   }
 
@@ -371,6 +437,7 @@ async function callGeminiFailover(messages: ChatMessage[]): Promise<AIProviderRe
 
   console.log('=== Attempting Gemini Failover ===');
   console.log('Model:', model);
+  console.log('Messages count:', messages.length);
 
   try {
     // Convert messages to Gemini format
@@ -393,18 +460,26 @@ async function callGeminiFailover(messages: ChatMessage[]): Promise<AIProviderRe
       }),
     });
 
+    console.log('Gemini response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Gemini returned status ${response.status}`);
+      const errorText = await response.text();
+      console.error('Gemini error response:', errorText);
+      throw new Error(`Gemini returned status ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('Gemini response data keys:', Object.keys(data));
+    
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     if (!content) {
+      console.error('Gemini response structure:', JSON.stringify(data, null, 2));
       throw new Error('No content in Gemini response');
     }
 
     console.log('=== Gemini Failover Success ===');
+    console.log('Content length:', content.length);
     return {
       content,
       provider: 'Cloud Failover (Gemini)',
@@ -412,29 +487,42 @@ async function callGeminiFailover(messages: ChatMessage[]): Promise<AIProviderRe
     };
   } catch (error) {
     console.error('=== Gemini Failover Failed ===');
-    console.error('Error:', error instanceof Error ? error.message : error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+    } else {
+      console.error('Unknown error:', error);
+    }
     throw error;
   }
 }
 
 async function getAIResponseWithFailover(messages: ChatMessage[]): Promise<AIProviderResponse> {
+  console.log('=== Starting AI Provider Failover Chain ===');
+  
   // Try Local Ollama first (Primary)
   try {
+    console.log('Step 1: Attempting Local Ollama (Primary)');
     return await callLocalOllama(messages);
   } catch (localError) {
     console.warn('Local Ollama unavailable, trying Groq failover...');
+    console.warn('Local error:', localError instanceof Error ? localError.message : localError);
 
     // Try Groq (Tier 1 Fallback)
     try {
+      console.log('Step 2: Attempting Groq (Tier 1 Fallback)');
       return await callGroqFailover(messages);
     } catch (groqError) {
       console.warn('Groq failover unavailable, trying Gemini failover...');
+      console.warn('Groq error:', groqError instanceof Error ? groqError.message : groqError);
 
       // Try Gemini (Tier 2 Fallback)
       try {
+        console.log('Step 3: Attempting Gemini (Tier 2 Fallback)');
         return await callGeminiFailover(messages);
       } catch (geminiError) {
-        console.error('All AI providers failed');
+        console.error('=== All AI Providers Failed ===');
+        console.error('Gemini error:', geminiError instanceof Error ? geminiError.message : geminiError);
         throw new Error('All AI providers are currently unavailable. Please try again later.');
       }
     }
@@ -484,10 +572,14 @@ async function performWebSearch(query: string): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
+    // Validate and log environment variables
+    validateEnvironmentVariables();
+    
     const body = await request.json();
     const { message, conversationId, mode, botPersonality, userId } = body;
 
     if (!message || !conversationId || !mode) {
+      console.error('Missing required fields:', { message: !!message, conversationId: !!conversationId, mode: !!mode });
       return NextResponse.json(
         { error: 'Missing required fields: message, conversationId, mode' },
         { status: 400 }
@@ -495,11 +587,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (!supabase) {
+      console.error('Supabase client not initialized');
       return NextResponse.json({ error: 'Supabase client not initialized' }, { status: 500 });
     }
 
     const server = supabaseServer();
     if (!server) {
+      console.error('Supabase server client not initialized');
       return NextResponse.json({ error: 'Supabase server client not initialized' }, { status: 500 });
     }
 
@@ -813,8 +907,11 @@ ${searchResults}
       console.log('Content length:', aiResponse.content.length);
     } catch (error) {
       console.error('ERROR: All AI providers failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'All AI providers are currently unavailable';
+      
+      // Return JSON error response for proper front-end handling
       return NextResponse.json(
-        { error: error instanceof Error ? error.message : 'All AI providers are currently unavailable' },
+        { error: errorMessage },
         { status: 503 }
       );
     }
@@ -887,25 +984,72 @@ ${searchResults}
       }
     }
 
-    // Return response with metadata
-    return NextResponse.json({
-      content: formattedContent,
-      mode,
-      codeBlock,
-      fileCard: (isFileRequest && foundFile) ? {
-        id: foundFile.id,
-        filename: foundFile.filename,
-        file_type: foundFile.file_type,
-        file_url: foundFile.file_url,
-        description: foundFile.description,
-      } : null,
-      source,
-      provider,
-      model,
+    // Create streaming response to match front-end expectations
+    const encoder = new TextEncoder();
+    const responseMode = mode;
+    const responseCodeBlock = codeBlock;
+    const responseFileCard = (isFileRequest && foundFile) ? {
+      id: foundFile.id,
+      filename: foundFile.filename,
+      file_type: foundFile.file_type,
+      file_url: foundFile.file_url,
+      description: foundFile.description,
+    } : null;
+    const responseSource = source;
+    const responseProvider = provider;
+    const responseModel = model;
+    
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          console.log('=== Starting Stream Response ===');
+          
+          // Stream the content in chunks for better UX
+          const chunkSize = 100; // characters per chunk
+          for (let i = 0; i < formattedContent.length; i += chunkSize) {
+            const chunk = formattedContent.substring(i, i + chunkSize);
+            controller.enqueue(encoder.encode(chunk));
+            // Small delay to simulate streaming
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+
+          // Send metadata at the end
+          const metadata = {
+            mode: responseMode,
+            codeBlock: responseCodeBlock,
+            fileCard: responseFileCard,
+            source: responseSource,
+            provider: responseProvider,
+            model: responseModel,
+          };
+
+          controller.enqueue(encoder.encode('\n\n__METADATA__' + JSON.stringify(metadata)));
+          
+          console.log('=== Stream Complete ===');
+          controller.close();
+        } catch (error) {
+          console.error('Streaming error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          controller.enqueue(encoder.encode(`\n\nعذراً، حدث خطأ: ${errorMessage}`));
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readableStream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'Transfer-Encoding': 'chunked',
+      },
     });
   } catch (error) {
     console.error('Error in POST /api/chat:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to process chat request';
+    console.error('Error details:', errorMessage);
+    
+    // Return proper JSON error response
     return NextResponse.json(
       { error: errorMessage },
       { status: 500 }
