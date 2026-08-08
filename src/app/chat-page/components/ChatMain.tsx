@@ -237,16 +237,7 @@ export default function ChatMain({
       });
 
       if (!response.ok) {
-        // Try to parse error response from API
-        let errorMessage = 'Failed to get response';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (parseError) {
-          // If response is not JSON, use status text
-          errorMessage = response.statusText || errorMessage;
-        }
-        throw new Error(errorMessage);
+        throw new Error('Failed to get response');
       }
 
       // Handle streaming response
@@ -325,12 +316,10 @@ export default function ChatMain({
       });
     } catch (error) {
       console.error('Error sending message:', error);
-      const errorMessage = error instanceof Error ? error.message : 'عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.';
-      
       const errorMsg: Message = {
         id: `msg-${Date.now()}-bot`,
         role: 'bot',
-        content: errorMessage,
+        content: 'عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.',
         mode: activeMode,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
       };

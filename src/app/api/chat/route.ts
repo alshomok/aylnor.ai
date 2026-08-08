@@ -5,36 +5,6 @@ import { findBestMatch } from '@/lib/matching-algorithm';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-// Local-First AI Provider Interface
-interface AIProviderResponse {
-  content: string;
-  provider: string;
-  model: string;
-}
-
-// Environment Variable Validation
-function validateEnvironmentVariables() {
-  const missing: string[] = [];
-  
-  if (!process.env.OLLAMA_BASE_URL) {
-    missing.push('OLLAMA_BASE_URL (will use default: http://localhost:11434)');
-  }
-  if (!process.env.GROQ_API_KEY) {
-    missing.push('GROQ_API_KEY (Tier 1 failover unavailable)');
-  }
-  if (!process.env.GEMINI_API_KEY) {
-    missing.push('GEMINI_API_KEY (Tier 2 failover unavailable)');
-  }
-  
-  if (missing.length > 0) {
-    console.warn('=== Missing or Optional Environment Variables ===');
-    missing.forEach(msg => console.warn(`  - ${msg}`));
-    console.warn('=== End of Environment Variables Warning ===');
-  } else {
-    console.log('=== All Environment Variables Configured ===');
-  }
-}
-
 // Strict TypeScript Discriminated Unions for Execution States
 type ExecutionState =
   | { status: 'idle' }
@@ -270,265 +240,6 @@ async function checkHourlyRequestLimit(userId: string, mode: BotMode): Promise<{
   return { allowed: true };
 }
 
-// ============================================
-// Local-First AI Provider Functions
-// ============================================
-
-async function callLocalOllama(messages: ChatMessage[]): Promise<AIProviderResponse> {
-  // Sanitize OLLAMA_BASE_URL - remove trailing slashes
-  const baseUrl = process.env.OLLAMA_BASE_URL?.replace(/\/$/, '') || 'http://localhost:11434';
-  const endpoint = `${baseUrl}/api/chat`;
-  const model = 'qwen2.5-coder';
-
-  console.log('=== Attempting Local Ollama ===');
-  console.log('Endpoint:', endpoint);
-  console.log('Model:', model);
-  console.log('Messages count:', messages.length);
-
-  if (!process.env.OLLAMA_BASE_URL) {
-    console.warn('OLLAMA_BASE_URL not configured, using default: http://localhost:11434');
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 35000); // 35 second timeout for local inference
-
-    // Format messages for Ollama API
-    const formattedMessages = messages.map(msg => ({
-      role: msg.role === 'assistant' ? 'assistant' : 'user',
-      content: msg.content,
-    }));
-
-    console.log('Sending request to Ollama with timeout 35s');
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: formattedMessages,
-        stream: false,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    console.log('Ollama response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Ollama error response:', errorText);
-      throw new Error(`Ollama returned status ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log('Ollama response data keys:', Object.keys(data));
-    
-    const content = data.message?.content || data.response || '';
-
-    if (!content) {
-      console.error('Ollama response structure:', JSON.stringify(data, null, 2));
-      throw new Error('No content in Ollama response');
-    }
-
-    console.log('=== Local Ollama Success ===');
-    console.log('Content length:', content.length);
-    return {
-      content,
-      provider: 'Local Server (Ollama)',
-      model,
-    };
-  } catch (error) {
-    console.error('=== Local Ollama Failed ===');
-    if (error instanceof Error) {
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-      if (error.name === 'AbortError') {
-        console.error('Request timed out after 35 seconds');
-      }
-    } else {
-      console.error('Unknown error:', error);
-    }
-    throw error; // Re-throw to trigger failover
-  }
-}
-
-async function callGroqFailover(messages: ChatMessage[]): Promise<AIProviderResponse> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    console.error('GROQ_API_KEY not configured');
-    throw new Error('GROQ_API_KEY not configured');
-  }
-
-  const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-  const model = 'llama-3.3-70b-versatile';
-
-  console.log('=== Attempting Groq Failover ===');
-  console.log('Model:', model);
-  console.log('Messages count:', messages.length);
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: messages.map(msg => ({
-          role: msg.role === 'assistant' ? 'assistant' : 'user',
-          content: msg.content,
-        })),
-        temperature: 0.7,
-        max_tokens: 4096,
-      }),
-    });
-
-    console.log('Groq response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Groq error response:', errorText);
-      throw new Error(`Groq returned status ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log('Groq response data keys:', Object.keys(data));
-    
-    const content = data.choices?.[0]?.message?.content || '';
-
-    if (!content) {
-      console.error('Groq response structure:', JSON.stringify(data, null, 2));
-      throw new Error('No content in Groq response');
-    }
-
-    console.log('=== Groq Failover Success ===');
-    console.log('Content length:', content.length);
-    return {
-      content,
-      provider: 'Cloud Failover (Groq)',
-      model,
-    };
-  } catch (error) {
-    console.error('=== Groq Failover Failed ===');
-    if (error instanceof Error) {
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-    } else {
-      console.error('Unknown error:', error);
-    }
-    throw error; // Re-throw to trigger next failover
-  }
-}
-
-async function callGeminiFailover(messages: ChatMessage[]): Promise<AIProviderResponse> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error('GEMINI_API_KEY not configured');
-    throw new Error('GEMINI_API_KEY not configured');
-  }
-
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-  const model = 'gemini-1.5-flash';
-
-  console.log('=== Attempting Gemini Failover ===');
-  console.log('Model:', model);
-  console.log('Messages count:', messages.length);
-
-  try {
-    // Convert messages to Gemini format
-    const geminiMessages = messages.map(msg => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }],
-    }));
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: geminiMessages,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 4096,
-        },
-      }),
-    });
-
-    console.log('Gemini response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Gemini error response:', errorText);
-      throw new Error(`Gemini returned status ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log('Gemini response data keys:', Object.keys(data));
-    
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    if (!content) {
-      console.error('Gemini response structure:', JSON.stringify(data, null, 2));
-      throw new Error('No content in Gemini response');
-    }
-
-    console.log('=== Gemini Failover Success ===');
-    console.log('Content length:', content.length);
-    return {
-      content,
-      provider: 'Cloud Failover (Gemini)',
-      model,
-    };
-  } catch (error) {
-    console.error('=== Gemini Failover Failed ===');
-    if (error instanceof Error) {
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-    } else {
-      console.error('Unknown error:', error);
-    }
-    throw error;
-  }
-}
-
-async function getAIResponseWithFailover(messages: ChatMessage[]): Promise<AIProviderResponse> {
-  console.log('=== Starting AI Provider Failover Chain ===');
-  
-  // Try Local Ollama first (Primary)
-  try {
-    console.log('Step 1: Attempting Local Ollama (Primary)');
-    return await callLocalOllama(messages);
-  } catch (localError) {
-    console.warn('Local Ollama unavailable, trying Groq failover...');
-    console.warn('Local error:', localError instanceof Error ? localError.message : localError);
-
-    // Try Groq (Tier 1 Fallback)
-    try {
-      console.log('Step 2: Attempting Groq (Tier 1 Fallback)');
-      return await callGroqFailover(messages);
-    } catch (groqError) {
-      console.warn('Groq failover unavailable, trying Gemini failover...');
-      console.warn('Groq error:', groqError instanceof Error ? groqError.message : groqError);
-
-      // Try Gemini (Tier 2 Fallback)
-      try {
-        console.log('Step 3: Attempting Gemini (Tier 2 Fallback)');
-        return await callGeminiFailover(messages);
-      } catch (geminiError) {
-        console.error('=== All AI Providers Failed ===');
-        console.error('Gemini error:', geminiError instanceof Error ? geminiError.message : geminiError);
-        throw new Error('All AI providers are currently unavailable. Please try again later.');
-      }
-    }
-  }
-}
-
 async function performWebSearch(query: string): Promise<string> {
   const apiKey = process.env.SEARCH_API_KEY;
   if (!apiKey) {
@@ -572,14 +283,10 @@ async function performWebSearch(query: string): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate and log environment variables
-    validateEnvironmentVariables();
-    
     const body = await request.json();
     const { message, conversationId, mode, botPersonality, userId } = body;
 
     if (!message || !conversationId || !mode) {
-      console.error('Missing required fields:', { message: !!message, conversationId: !!conversationId, mode: !!mode });
       return NextResponse.json(
         { error: 'Missing required fields: message, conversationId, mode' },
         { status: 400 }
@@ -587,13 +294,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!supabase) {
-      console.error('Supabase client not initialized');
       return NextResponse.json({ error: 'Supabase client not initialized' }, { status: 500 });
     }
 
     const server = supabaseServer();
     if (!server) {
-      console.error('Supabase server client not initialized');
       return NextResponse.json({ error: 'Supabase server client not initialized' }, { status: 500 });
     }
 
@@ -883,153 +588,153 @@ ${searchResults}
       }
     }
 
-    // Generate AI response with Local-First failover strategy
-    console.log('=== Generating AI Response with Local-First Failover ===');
+    // Generate AI response with streaming using optimized chat history and dynamic skill prompt
+    console.log('=== Generating AI Response ===');
     console.log('Optimized chat history length:', optimizedChatHistory.length);
     console.log('Final message length:', finalMessage.length);
     console.log('Mode:', mode);
     console.log('Bot personality:', botPersonality);
     console.log('Skill prompt loaded from file:', skillPrompt.substring(0, 100) + '...');
 
-    // Prepare messages with system prompt
-    const systemPrompt = botPersonality
-      ? `${skillPrompt}\n\nAdditional personality: ${botPersonality}`
-      : skillPrompt;
-
-    const apiMessages = [{ role: 'system' as const, content: systemPrompt }, ...optimizedChatHistory];
-
-    let aiResponse: AIProviderResponse;
+    let stream;
     try {
-      aiResponse = await getAIResponseWithFailover(apiMessages);
-      console.log('AI Response generated successfully');
-      console.log('Provider:', aiResponse.provider);
-      console.log('Model:', aiResponse.model);
-      console.log('Content length:', aiResponse.content.length);
+      stream = await generateAIResponseStream(optimizedChatHistory, mode as BotMode, botPersonality, skillPrompt);
+      console.log('Stream generated successfully');
+      console.log('Stream object:', stream);
+      console.log('Stream has textStream:', 'textStream' in stream);
     } catch (error) {
-      console.error('ERROR: All AI providers failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'All AI providers are currently unavailable';
-      
-      // Return JSON error response for proper front-end handling
-      return NextResponse.json(
-        { error: errorMessage },
-        { status: 503 }
-      );
+      console.error('ERROR: Failed to generate AI stream:', error);
+      throw error;
     }
 
-    // Process the AI response
-    const fullContent = aiResponse.content;
-    const provider = aiResponse.provider;
-    const model = aiResponse.model;
-
-    // Extract code block from full content
-    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
-    const matches = [...fullContent.matchAll(codeBlockRegex)];
+    // Collect the full response for database storage
+    let fullContent = '';
     let codeBlock: { language: string; code: string } | undefined = undefined;
-    if (matches.length > 0) {
-      const lastMatch = matches[matches.length - 1];
-      codeBlock = {
-        language: lastMatch[1] || 'text',
-        code: lastMatch[2].trim(),
-      };
-    }
+    let provider = '';
+    let model = '';
+    let chunkCount = 0;
 
-    // Format the response based on source
-    let formattedContent = fullContent;
-    if (source === 'file' && foundFile) {
-      formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${fullContent}`;
-    } else if (source === 'web') {
-      formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${fullContent}`;
-    }
-
-    // Save bot response to Supabase (skip if local conversation)
-    if (!isLocalConversation) {
-      console.log('=== Saving Bot Message to Supabase ===');
-      console.log('Conversation ID:', conversationId);
-      console.log('Content length:', formattedContent.length);
-      console.log('Provider:', provider);
-      console.log('Model:', model);
-      
-      const { error: botMessageError } = await server.from('messages').insert({
-        conversation_id: conversationId,
-        role: 'bot',
-        content: formattedContent,
-        mode: mode as BotMode,
-        code_block: codeBlock,
-      });
-
-      if (botMessageError) {
-        console.error('=== Error Saving Bot Message ===');
-        console.error('Error:', botMessageError);
-        console.error('Message:', botMessageError.message);
-        console.error('Details:', botMessageError.details);
-        console.error('Hint:', botMessageError.hint);
-        console.error('Code:', botMessageError.code);
-      } else {
-        console.log('=== Bot Message Saved Successfully ===');
-      }
-
-      // Update conversation timestamp and last message
-      const { error: updateError } = await server
-        .from('conversations')
-        .update({
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', conversationId);
-
-      if (updateError) {
-        console.error('=== Error Updating Conversation ===');
-        console.error('Error:', updateError);
-      } else {
-        console.log('=== Conversation Updated Successfully ===');
-      }
-    }
-
-    // Create streaming response to match front-end expectations
+    // Create a readable stream
     const encoder = new TextEncoder();
-    const responseMode = mode;
-    const responseCodeBlock = codeBlock;
-    const responseFileCard = (isFileRequest && foundFile) ? {
-      id: foundFile.id,
-      filename: foundFile.filename,
-      file_type: foundFile.file_type,
-      file_url: foundFile.file_url,
-      description: foundFile.description,
-    } : null;
-    const responseSource = source;
-    const responseProvider = provider;
-    const responseModel = model;
-    
+    const decoder = new TextDecoder();
+
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
-          console.log('=== Starting Stream Response ===');
+          console.log('=== Starting Stream ===');
           
-          // Stream the content in chunks for better UX
-          const chunkSize = 100; // characters per chunk
-          for (let i = 0; i < formattedContent.length; i += chunkSize) {
-            const chunk = formattedContent.substring(i, i + chunkSize);
+          let hasChunks = false;
+          for await (const chunk of stream.textStream) {
+            hasChunks = true;
+            chunkCount++;
+            fullContent += chunk;
+            console.log(`Chunk ${chunkCount}:`, chunk.length, 'chars');
             controller.enqueue(encoder.encode(chunk));
-            // Small delay to simulate streaming
-            await new Promise(resolve => setTimeout(resolve, 10));
           }
 
-          // Send metadata at the end
-          const metadata = {
-            mode: responseMode,
-            codeBlock: responseCodeBlock,
-            fileCard: responseFileCard,
-            source: responseSource,
-            provider: responseProvider,
-            model: responseModel,
-          };
+          if (!hasChunks) {
+            console.error('ERROR: Stream produced zero chunks');
+            const errorMessage = 'عذراً، حدث خطأ في الاتصال بخدمة الذكاء الاصطناعي. لم يتم استلام أي رد.';
+            controller.enqueue(encoder.encode(errorMessage));
+            fullContent = errorMessage;
+          }
 
-          controller.enqueue(encoder.encode('\n\n__METADATA__' + JSON.stringify(metadata)));
-          
-          console.log('=== Stream Complete ===');
+          console.log('=== Stream Ended ===');
+          console.log('Total chunks:', chunkCount);
+          console.log('Full content length:', fullContent.length);
+
+          // Extract code block from full content
+          const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+          const matches = [...fullContent.matchAll(codeBlockRegex)];
+          if (matches.length > 0) {
+            const lastMatch = matches[matches.length - 1];
+            codeBlock = {
+              language: lastMatch[1] || 'text',
+              code: lastMatch[2].trim(),
+            };
+          }
+
+          // Remove __METADATA__ from content before saving to database
+          const METADATA_MARKER = '\n\n__METADATA__';
+          const metaIdx = fullContent.indexOf(METADATA_MARKER);
+          const cleanContent = metaIdx !== -1
+            ? fullContent.substring(0, metaIdx)
+            : fullContent;
+
+          // Format the response based on source
+          let formattedContent = cleanContent;
+          if (source === 'file' && foundFile) {
+            formattedContent = `📂 وجدت معلومات في ملف: ${foundFile.description}\n\n${cleanContent}`;
+          } else if (source === 'web') {
+            formattedContent = `🌐 لم أجد ملفاً محفوظاً، هذا ما وجدته على الإنترنت:\n\n${cleanContent}`;
+          }
+
+          // Save bot response to Supabase (skip if local conversation)
+          if (!isLocalConversation) {
+            console.log('=== Saving Bot Message to Supabase ===');
+            console.log('Conversation ID:', conversationId);
+            console.log('Content length:', formattedContent.length);
+            
+            const { error: botMessageError } = await server.from('messages').insert({
+              conversation_id: conversationId,
+              role: 'bot',
+              content: formattedContent,
+              mode: mode as BotMode,
+              code_block: codeBlock,
+            });
+
+            if (botMessageError) {
+              console.error('=== Error Saving Bot Message ===');
+              console.error('Error:', botMessageError);
+              console.error('Message:', botMessageError.message);
+              console.error('Details:', botMessageError.details);
+              console.error('Hint:', botMessageError.hint);
+              console.error('Code:', botMessageError.code);
+            } else {
+              console.log('=== Bot Message Saved Successfully ===');
+            }
+
+            // Update conversation timestamp and last message
+            const { error: updateError } = await server
+              .from('conversations')
+              .update({
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', conversationId);
+
+            if (updateError) {
+              console.error('=== Error Updating Conversation ===');
+              console.error('Error:', updateError);
+            } else {
+              console.log('=== Conversation Updated Successfully ===');
+            }
+          }
+
+          // Send final metadata in a single chunk to prevent separation
+          controller.enqueue(
+            encoder.encode(
+              '\n\n__METADATA__' + JSON.stringify({
+                mode,
+                codeBlock,
+                fileCard: (isFileRequest && foundFile) ? {
+                  id: foundFile.id,
+                  filename: foundFile.filename,
+                  file_type: foundFile.file_type,
+                  file_url: foundFile.file_url,
+                  description: foundFile.description,
+                } : null,
+                source,
+              })
+            )
+          );
+
           controller.close();
         } catch (error) {
           console.error('Streaming error:', error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          console.error('Error details:', errorMessage);
+          
+          // Stream error message to UI instead of failing silently
           controller.enqueue(encoder.encode(`\n\nعذراً، حدث خطأ: ${errorMessage}`));
           controller.close();
         }
@@ -1046,12 +751,8 @@ ${searchResults}
     });
   } catch (error) {
     console.error('Error in POST /api/chat:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to process chat request';
-    console.error('Error details:', errorMessage);
-    
-    // Return proper JSON error response
     return NextResponse.json(
-      { error: errorMessage },
+      { error: 'Failed to process chat request' },
       { status: 500 }
     );
   }
